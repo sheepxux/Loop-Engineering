@@ -154,7 +154,7 @@ test("canonical Skill validates and installs for Codex and Claude Code", async (
   await assert.rejects(() => main(["skill", "install", "codex", "--out", tmp]), /overwrite existing Skill/);
 });
 
-test("Skill validation accepts GitHub CLI source metadata on an installed copy", () => {
+test("Skill validation accepts GitHub CLI source and pin metadata on an installed copy", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "loop-engineering-github-skill-"));
   const installed = path.join(tmp, "loop-engineering");
   fs.cpSync("skills/loop-engineering", installed, { recursive: true });
@@ -164,6 +164,7 @@ test("Skill validation accepts GitHub CLI source metadata on an installed copy",
   const tracking = [
     "metadata:",
     "  github-path: skills/loop-engineering",
+    "  github-pinned: v1.0.1",
     "  github-ref: refs/tags/v1.0.1",
     "  github-repo: https://github.com/sheepxux/Loop-Engineering",
     "  github-tree-sha: 0123456789abcdef0123456789abcdef01234567"
