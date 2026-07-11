@@ -4,7 +4,7 @@ Run exactly one bounded iteration of this loop. `loop.yaml` is the contract; thi
 
 This contract assumes only file IO and command execution. Run the worker and the evaluator as separate processes or prompts with no shared conversational state.
 
-If `loopctl` is not on PATH, use `npx -y -p @sheepxux/loop-engineering loopctl`.
+If `loopctl` is not on PATH, use the repository-local `node ./bin/loopctl.js` or the pinned GitHub release package: `npm exec --yes --package=github:sheepxux/Loop-Engineering#v1.0.0 -- loopctl`. Do not run a floating package version.
 
 ## 0. Locate or create the loop
 
@@ -56,7 +56,7 @@ git worktree add ../<loop-name>-<item-id> -b <branchPrefix>-<item-id>
 
 - The worker touches files only inside its worktree and uses only `handoff.permissions`.
 - Worker output: the change itself plus a `worker-notes.md` (what changed, why, how to verify).
-- The worker never runs verification and never declares its own work done.
+- The worker may run narrow development checks for feedback, but never issues the final evaluator verdict or declares its own work accepted.
 - If the worker hits a blocked condition, it writes the blocker to its notes and stops.
 - Clean up when the item is finished: `git worktree remove ../<loop-name>-<item-id>`.
 
@@ -87,7 +87,16 @@ Compose one run log for the whole run (`loopctl schema run-log` prints the schem
   "finishedAt": "<ISO timestamp>",
   "status": "passed",
   "discovered": [{ "id": "<item-id>", "summary": "...", "source": "..." }],
-  "results": [{ "itemId": "<item-id>", "verdict": "pass", "summary": "..." }],
+  "results": [{
+    "itemId": "<item-id>",
+    "verdict": "pass",
+    "summary": "...",
+    "evaluator": {
+      "artifact": "evaluators/<item-id>.json",
+      "sha256": "<64 lowercase hex characters>",
+      "contextId": "<independent evaluator context id>"
+    }
+  }],
   "budget": { "runtimeMinutes": 12, "itemsAttempted": 1, "estimatedUsd": 0 }
 }
 ```

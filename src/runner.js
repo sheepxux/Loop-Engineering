@@ -68,7 +68,7 @@ export function runTick({
           outcomes.push(result(loop, "error", error?.message || String(error), { runId, runDir }));
         }
       } finally {
-        releaseLease(lease.leasePath, runId);
+        releaseLease(lease.leasePath, lease.lease.token || runId);
       }
     } catch (error) {
       outcomes.push({
@@ -218,7 +218,8 @@ function executeLoop(loop, plan, runId, lease, { now, timeoutMs }) {
 
   if (loop.spec.runner.executor === "dry-run") {
     appendEvent(eventPath, "executor-start", { executor: "dry-run" }, new Date());
-    runLog = baseRunLog(loop, runId, startedAt, "passed");
+    executorStatus = "dry-run";
+    runLog = baseRunLog(loop, runId, startedAt, "dry-run");
     appendEvent(eventPath, "executor-end", { executor: "dry-run", exitCode: 0 }, new Date());
   } else {
     appendEvent(eventPath, "executor-start", { executor: "command" }, new Date());
@@ -260,6 +261,12 @@ function executeLoop(loop, plan, runId, lease, { now, timeoutMs }) {
     } else {
       executorStatus = "failed";
       runLog = baseRunLog(loop, runId, startedAt, "failed");
+      runLog.failure = {
+        type: exitCode === 0 ? "missing-run-log" : "command-failed",
+        summary: exitCode === 0
+          ? "Command exited successfully but did not write the required run-log draft."
+          : `Command executor exited with code ${exitCode}.`
+      };
       appendEvent(eventPath, "executor-fallback-log", {
         reason: exitCode === 0 ? "missing-run-log" : "command-failed"
       }, new Date());
@@ -272,16 +279,17 @@ function executeLoop(loop, plan, runId, lease, { now, timeoutMs }) {
     ...(runLog.budget || {}),
     runtimeMinutes: Math.max(0, (Date.now() - startedMs) / 60_000)
   };
-  if (loop.spec.evolution?.enabled && typeof runLog.metrics?.[loop.spec.evolution.metric.name] !== "number") {
-    runLog.metrics = { ...(runLog.metrics || {}), [loop.spec.evolution.metric.name]: 0 };
-  }
-
   const recorded = recordRun(loop, runLog, { force: true, now: new Date(), runFile });
   appendEvent(eventPath, "run-recorded", { status: runLog.status, statePath: recorded.statePath }, new Date());
   writeText(path.join(runDir, "summary.md"), summary(loop, runLog, executorStatus));
   appendEvent(eventPath, "runner-end", { status: runLog.status }, new Date());
 
-  return result(loop, runLog.status === "passed" ? "ran" : "failed", "executed", {
+  const outcome = runLog.status === "dry-run"
+    ? "dry-run"
+    : ["passed", "no-work"].includes(runLog.status)
+      ? "ran"
+      : "failed";
+  return result(loop, outcome, "executed", {
     runId,
     runDir,
     runFile,
@@ -301,9 +309,6 @@ function baseRunLog(loop, runId, startedAt, status) {
     results: [],
     budget: { runtimeMinutes: 0, itemsAttempted: 0, estimatedUsd: 0 }
   };
-  if (loop.spec.evolution?.enabled) {
-    log.metrics = { [loop.spec.evolution.metric.name]: 0 };
-  }
   return log;
 }
 

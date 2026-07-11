@@ -22,20 +22,22 @@ async function initRunnerLoop(name = "runner-loop", mutate = null) {
   return { tmp, root, loopDir: path.join(root, name) };
 }
 
-test("loopd dry-run creates durable run artifacts and records state", async () => {
+test("loopd dry-run creates durable artifacts without counting task success or budget", async () => {
   const { root, loopDir } = await initRunnerLoop();
   const now = new Date("2026-07-10T12:00:00Z");
   const outcomes = runTick({ root, loopName: "runner-loop", now, forceManual: true });
 
   assert.equal(outcomes.length, 1);
-  assert.equal(outcomes[0].status, "ran");
+  assert.equal(outcomes[0].status, "dry-run");
   assert.equal(fs.existsSync(path.join(outcomes[0].runDir, "run-log.json")), true);
   assert.equal(fs.existsSync(path.join(outcomes[0].runDir, "events.ndjson")), true);
   assert.equal(fs.existsSync(path.join(outcomes[0].runDir, "summary.md")), true);
   assert.equal(fs.existsSync(path.join(loopDir, "locks", "active-run.json")), false);
 
   const state = readData(path.join(loopDir, "state.json"));
-  assert.equal(state.budgets.runsToday, 1);
+  assert.equal(state.budgets.runsToday, 0);
+  assert.equal(state.lastRunAt, null);
+  assert.equal(readData(outcomes[0].runFile).status, "dry-run");
   assert.equal(listRuns(loopDir).length, 1);
 });
 
@@ -48,7 +50,7 @@ test("file leases prevent overlapping runs and recover expired holders", async (
   const second = acquireLease(loopDir, "run-b", 10, { now });
   assert.equal(second.acquired, false);
   assert.equal(second.lease.runId, "run-a");
-  assert.equal(releaseLease(first.leasePath, "run-a"), true);
+  assert.equal(releaseLease(first.leasePath, first.lease.token), true);
 
   writeLease(loopDir, {
     runId: "expired-run",
@@ -60,7 +62,7 @@ test("file leases prevent overlapping runs and recover expired holders", async (
   const recovered = acquireLease(loopDir, "run-c", 10, { now });
   assert.equal(recovered.acquired, true);
   assert.equal(recovered.recovered.runId, "expired-run");
-  releaseLease(recovered.leasePath, "run-c");
+  releaseLease(recovered.leasePath, recovered.lease.token);
 });
 
 test("paused loops are skipped until resumed", async () => {
@@ -83,7 +85,7 @@ test("paused loops are skipped until resumed", async () => {
     now: new Date("2026-07-10T12:01:00Z"),
     forceManual: true
   });
-  assert.equal(resumed[0].status, "ran");
+  assert.equal(resumed[0].status, "dry-run");
 });
 
 test("interval cadence skips recent loops and runs due loops", async () => {
@@ -103,7 +105,7 @@ test("interval cadence skips recent loops and runs due loops", async () => {
   state.lastRunAt = "2026-07-10T10:00:00Z";
   writeJson(statePath, state);
   const due = runTick({ root, now });
-  assert.equal(due[0].status, "ran");
+  assert.equal(due[0].status, "dry-run");
 });
 
 test("command executor consumes a structured draft run log", async () => {
@@ -117,7 +119,7 @@ const log = {
   runId: process.env.LOOP_RUN_ID,
   startedAt: new Date().toISOString(),
   finishedAt: new Date().toISOString(),
-  status: "passed",
+  status: "no-work",
   discovered: [],
   results: [],
   budget: { runtimeMinutes: 0, itemsAttempted: 0, estimatedUsd: 0 }
@@ -127,7 +129,6 @@ process.stdout.write("executor complete");
 `);
     spec.runner.executor = "command";
     spec.runner.command = `node ${JSON.stringify(script)}`;
-    spec.runner.workingDirectory = tmp;
   });
 
   const outcomes = runTick({
@@ -138,7 +139,7 @@ process.stdout.write("executor complete");
     forceManual: true
   });
   assert.equal(outcomes[0].status, "ran");
-  assert.equal(readData(outcomes[0].runFile).status, "passed");
+  assert.equal(readData(outcomes[0].runFile).status, "no-work");
   assert.match(fs.readFileSync(path.join(outcomes[0].runDir, "stdout.log"), "utf8"), /executor complete/);
   assert.equal(readData(path.join(loopDir, "state.json")).budgets.runsToday, 1);
 });

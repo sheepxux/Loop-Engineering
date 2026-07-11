@@ -3,6 +3,7 @@ import path from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import { readData, readText, repoRoot, schemaPath } from "./fs-utils.js";
 import { staticAdapterFiles } from "./skill-content.js";
+import { validateSkillPackage } from "./skill-package.js";
 import { validateLoopFile } from "./validation.js";
 
 const REQUIRED_FILES = [
@@ -16,6 +17,10 @@ const REQUIRED_FILES = [
   ".github/ISSUE_TEMPLATE/bug_report.md",
   ".github/ISSUE_TEMPLATE/feature_request.md",
   ".github/pull_request_template.md",
+  ".codex-plugin/plugin.json",
+  ".agents/plugins/marketplace.json",
+  ".claude-plugin/plugin.json",
+  ".claude-plugin/marketplace.json",
   "package.json",
   "bin/loopctl.js",
   "bin/loopd.js",
@@ -28,12 +33,24 @@ const REQUIRED_FILES = [
   "protocol/run-log.schema.json",
   "protocol/strategy.schema.json",
   "protocol/experiment.schema.json",
+  "protocol/approval.schema.json",
   "templates/loop.yaml",
   "templates/state.json",
   "templates/strategy.json",
   "templates/experiment.json",
-  "adapters/codex/SKILL.md",
-  "adapters/claude-code/SKILL.md",
+  "templates/approval.json",
+  "skills/loop-engineering/SKILL.md",
+  "skills/loop-engineering/agents/openai.yaml",
+  "skills/loop-engineering/references/suitability-and-patterns.md",
+  "skills/loop-engineering/references/contract-design.md",
+  "skills/loop-engineering/references/execution-and-evaluation.md",
+  "skills/loop-engineering/references/runtime-integrations.md",
+  "skills/loop-engineering/references/strategy-evolution.md",
+  "skills/loop-engineering/references/safety-and-governance.md",
+  "skills/loop-engineering/references/troubleshooting.md",
+  "skills/loop-engineering/scripts/run-loopctl.mjs",
+  "skills/loop-engineering/assets/loop.yaml",
+  "skills/loop-engineering/evals/evals.json",
   "adapters/chatgpt/SKILL.md",
   "adapters/openclaw/loop-instructions.md",
   "adapters/generic-harness/loop-instructions.md",
@@ -57,6 +74,7 @@ const TEMPLATE_DATA_FILES = [
   ["run-log", "templates/run-log.json"],
   ["strategy", "templates/strategy.json"],
   ["experiment", "templates/experiment.json"]
+  , ["approval", "templates/approval.json"]
 ];
 
 export function runDoctor() {
@@ -64,9 +82,12 @@ export function runDoctor() {
   checkNodeVersion(checks);
   checkRequiredFiles(checks);
   checkPackageMetadata(checks);
+  checkDistributionVersions(checks);
+  checkCanonicalSkill(checks);
   checkSchemasParse(checks);
   checkLoopSpecsValidate(checks);
   checkTemplateDataValidate(checks);
+  checkSkillAssetsInSync(checks);
   checkAdaptersInSync(checks);
 
   for (const check of checks) {
@@ -112,12 +133,49 @@ function checkPackageMetadata(checks) {
   checks.push({ ok: pkg.bin?.loopctl === "bin/loopctl.js", message: "loopctl bin is configured" });
   checks.push({ ok: pkg.bin?.loopd === "bin/loopd.js", message: "loopd bin is configured" });
   checks.push({ ok: Array.isArray(pkg.files) && pkg.files.includes("protocol/"), message: "npm files include protocol/" });
+  checks.push({ ok: Array.isArray(pkg.files) && pkg.files.includes("skills/"), message: "npm files include canonical skills/" });
+  checks.push({ ok: Array.isArray(pkg.files) && pkg.files.includes(".codex-plugin/"), message: "npm files include Codex plugin manifest" });
+  checks.push({ ok: Array.isArray(pkg.files) && pkg.files.includes(".claude-plugin/"), message: "npm files include Claude plugin manifest" });
   checks.push({ ok: Array.isArray(pkg.files) && pkg.files.includes("README.en.md"), message: "npm files include English README" });
   checks.push({ ok: Boolean(pkg.repository?.url), message: "package repository URL is set" });
 }
 
+function checkDistributionVersions(checks) {
+  const pkg = readData(path.join(repoRoot, "package.json"));
+  const codex = readData(path.join(repoRoot, ".codex-plugin", "plugin.json"));
+  const claude = readData(path.join(repoRoot, ".claude-plugin", "plugin.json"));
+  const marketplace = readData(path.join(repoRoot, ".claude-plugin", "marketplace.json"));
+  for (const [name, version] of [
+    ["Codex plugin", codex.version],
+    ["Claude plugin", claude.version],
+    ["Claude marketplace", marketplace.metadata?.version]
+  ]) {
+    checks.push({ ok: version === pkg.version, message: `${name} version matches package version ${pkg.version}` });
+  }
+  for (const schema of ["loop", "state", "evaluator", "run-log", "strategy", "experiment", "approval"]) {
+    const data = JSON.parse(readText(schemaPath(schema)));
+    checks.push({
+      ok: typeof data.$id === "string" && data.$id.includes(`/v${pkg.version}/`),
+      message: `schema $id is pinned to v${pkg.version}: ${schema}`
+    });
+  }
+}
+
+function checkCanonicalSkill(checks) {
+  const result = validateSkillPackage(path.join(repoRoot, "skills", "loop-engineering"));
+  checks.push({
+    ok: result.ok,
+    message: result.ok
+      ? `canonical Skill validates (${result.lineCount} lines)`
+      : `canonical Skill validates (${result.errors.join("; ")})`
+  });
+  for (const warning of result.warnings) {
+    checks.push({ ok: true, message: `canonical Skill warning: ${warning}` });
+  }
+}
+
 function checkSchemasParse(checks) {
-  for (const schema of ["loop", "state", "evaluator", "run-log", "strategy", "experiment"]) {
+  for (const schema of ["loop", "state", "evaluator", "run-log", "strategy", "experiment", "approval"]) {
     try {
       JSON.parse(readText(schemaPath(schema)));
       checks.push({ ok: true, message: `schema parses: ${schema}` });
@@ -168,6 +226,26 @@ function checkAdaptersInSync(checks) {
       hint = ` (${error.message})`;
     }
     checks.push({ ok, message: `adapter file in sync with src/skill-content.js: ${relativePath}${hint}` });
+  }
+}
+
+function checkSkillAssetsInSync(checks) {
+  for (const name of [
+    "loop.yaml",
+    "state.json",
+    "evaluator-result.json",
+    "run-log.json",
+    "strategy.json",
+    "experiment.json",
+    "approval.json"
+  ]) {
+    const skillAsset = path.join(repoRoot, "skills", "loop-engineering", "assets", name);
+    const compatibilityTemplate = path.join(repoRoot, "templates", name);
+    const ok = fs.existsSync(skillAsset) && fs.existsSync(compatibilityTemplate) && readText(skillAsset) === readText(compatibilityTemplate);
+    checks.push({
+      ok,
+      message: `Skill asset is canonical and templates mirror is in sync: ${name}${ok ? "" : " (run npm run build:assets)"}`
+    });
   }
 }
 

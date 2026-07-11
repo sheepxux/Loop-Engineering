@@ -1,18 +1,19 @@
 import Ajv2020 from "ajv/dist/2020.js";
+import path from "node:path";
 import { readData, readText, schemaPath } from "./fs-utils.js";
 
 const HIGH_RISK_PERMISSIONS = new Map([
-  ["merge", "merge"],
-  ["deploy", "deploy"],
-  ["delete-data", "delete"],
-  ["spend-money", "spend"],
-  ["change-permissions", "permission"],
-  ["write-external-system", "external"]
+  ["merge", "merge-pull-request"],
+  ["deploy", "deploy-production"],
+  ["delete-data", "delete-data"],
+  ["spend-money", "spend-money"],
+  ["change-permissions", "change-permissions"],
+  ["write-external-system", "write-external-system"]
 ]);
 
 const REVIEW_OUTPUTS = new Map([
-  ["pull-request", "pull request"],
-  ["issue-comment", "issue"]
+  ["pull-request", "open-pull-request"],
+  ["issue-comment", "comment-on-issue"]
 ]);
 
 export function validateLoopFile(filePath) {
@@ -128,19 +129,37 @@ function customChecks(spec, errors, warnings) {
     warnings.push(`persistence.runLogDir should include the loop name "${name}" for auditability.`);
   }
 
-  const humanOnly = normalizeList(spec.safety.humanGates.humanOnly);
-  for (const [permission, keyword] of HIGH_RISK_PERMISSIONS) {
-    if (spec.handoff.permissions.includes(permission) && !containsKeyword(humanOnly, keyword)) {
+  const expectedRoot = `.loop-engineering/loops/${name}/`;
+  for (const [field, value] of Object.entries(spec.persistence)) {
+    if (!isSafeRelativePath(value)) {
+      errors.push(`persistence.${field} must be a safe repository-relative path without traversal.`);
+    } else if (!String(value).replaceAll("\\", "/").startsWith(expectedRoot)) {
+      errors.push(`persistence.${field} must stay under ${expectedRoot}`);
+    }
+  }
+  if (!/^[a-z0-9][a-z0-9._/-]*$/.test(spec.handoff.worktree.branchPrefix) || spec.handoff.worktree.branchPrefix.includes("..")) {
+    errors.push("handoff.worktree.branchPrefix contains unsafe characters or traversal.");
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(spec.schedule.concurrency.group)) {
+    errors.push("schedule.concurrency.group must be a safe identifier.");
+  }
+  if (spec.runner && !isSafeRelativePath(spec.runner.workingDirectory)) {
+    errors.push("runner.workingDirectory must be a safe relative path without traversal.");
+  }
+
+  const humanOnly = new Set(normalizeList(spec.safety.humanGates.humanOnly));
+  for (const [permission, actionId] of HIGH_RISK_PERMISSIONS) {
+    if (spec.handoff.permissions.includes(permission) && !humanOnly.has(actionId)) {
       errors.push(`high-risk permission "${permission}" must be represented in safety.humanGates.humanOnly.`);
     }
   }
 
-  const needsReview = normalizeList([
+  const needsReview = new Set(normalizeList([
     ...spec.safety.humanGates.needsReview,
     ...spec.safety.humanGates.humanOnly
-  ]);
-  for (const [output, keyword] of REVIEW_OUTPUTS) {
-    if (spec.outputs.includes(output) && !containsKeyword(needsReview, keyword)) {
+  ]));
+  for (const [output, actionId] of REVIEW_OUTPUTS) {
+    if (spec.outputs.includes(output) && !needsReview.has(actionId)) {
       errors.push(`output "${output}" must have a matching needsReview or humanOnly gate.`);
     }
   }
@@ -172,6 +191,12 @@ function customChecks(spec, errors, warnings) {
       errors.push("automatic strategy promotion is allowed only for low-risk loops.");
     }
   }
+
+  const gates = spec.safety.humanGates;
+  const allGates = [...gates.autoAllowed, ...gates.needsReview, ...gates.humanOnly];
+  if (new Set(allGates).size !== allGates.length) {
+    errors.push("safety.humanGates action IDs must be unique across autoAllowed, needsReview, and humanOnly.");
+  }
 }
 
 function normalize(value) {
@@ -182,6 +207,7 @@ function normalizeList(values) {
   return values.map(normalize);
 }
 
-function containsKeyword(values, keyword) {
-  return values.some((value) => value.includes(keyword));
+function isSafeRelativePath(value) {
+  const text = String(value || "");
+  return text.length > 0 && !path.isAbsolute(text) && !text.includes("\0") && !text.split(/[\\/]/).includes("..");
 }

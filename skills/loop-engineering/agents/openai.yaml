@@ -1,0 +1,4 @@
+interface:
+  display_name: "Loop-Engineering"
+  short_description: "Design and operate verified agent loops"
+  default_prompt: "Use $loop-engineering to decide whether this task needs a loop, then design, validate, and run the safest measurable iteration."

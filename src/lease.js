@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
 import { readData, writeJson } from "./fs-utils.js";
 
 export function acquireLease(loopDir, runId, timeoutMinutes, { now = new Date() } = {}) {
@@ -11,11 +12,13 @@ export function acquireLease(loopDir, runId, timeoutMinutes, { now = new Date() 
   let recovered = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const lease = {
+      token: crypto.randomUUID(),
       runId,
       pid: process.pid,
       hostname: os.hostname(),
       startedAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + timeoutMinutes * 60_000).toISOString()
+      heartbeatAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + timeoutMinutes * 60_000 + 60_000).toISOString()
     };
 
     try {
@@ -31,6 +34,10 @@ export function acquireLease(loopDir, runId, timeoutMinutes, { now = new Date() 
       const active = safeReadLease(leasePath);
       if (!active || isExpired(active, now)) {
         recovered = active;
+        const confirmed = safeReadLease(leasePath);
+        if (!sameLease(active, confirmed)) {
+          continue;
+        }
         try {
           fs.unlinkSync(leasePath);
         } catch (unlinkError) {
@@ -47,12 +54,12 @@ export function acquireLease(loopDir, runId, timeoutMinutes, { now = new Date() 
   return { acquired: false, leasePath, lease: safeReadLease(leasePath), recovered };
 }
 
-export function releaseLease(leasePath, runId) {
+export function releaseLease(leasePath, ownerToken) {
   const active = safeReadLease(leasePath);
   if (!active) {
     return false;
   }
-  if (active.runId !== runId) {
+  if ((active.token || active.runId) !== ownerToken) {
     return false;
   }
   try {
@@ -64,6 +71,20 @@ export function releaseLease(leasePath, runId) {
     }
     throw error;
   }
+}
+
+export function renewLease(leasePath, ownerToken, timeoutMinutes, { now = new Date() } = {}) {
+  const active = safeReadLease(leasePath);
+  if (!active || (active.token || active.runId) !== ownerToken) return false;
+  const renewed = {
+    ...active,
+    heartbeatAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + timeoutMinutes * 60_000 + 60_000).toISOString()
+  };
+  const confirmed = safeReadLease(leasePath);
+  if (!sameLease(active, confirmed)) return false;
+  writeJson(leasePath, renewed);
+  return true;
 }
 
 export function writeLease(loopDir, lease) {
@@ -86,4 +107,10 @@ function safeReadLease(leasePath) {
 function isExpired(lease, now) {
   const expiresAt = new Date(lease.expiresAt);
   return Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= now.getTime();
+}
+
+function sameLease(left, right) {
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+  return (left.token || left.runId) === (right.token || right.runId);
 }

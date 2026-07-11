@@ -86,20 +86,20 @@ safety:
     onRepeatedFailure: move-to-inbox
   humanGates:
     autoAllowed:
-      - "read repository"
-      - "write isolated worktree"
-      - "run tests"
-      - "capture screenshots"
+      - "read-repository"
+      - "write-isolated-worktree"
+      - "run-tests"
+      - "capture-screenshots"
     needsReview:
-      - "open pull request"
-      - "comment on issue"
+      - "open-pull-request"
+      - "comment-on-issue"
     humanOnly:
-      - "merge pull request"
-      - "approve product design decision"
-      - "deploy production"
-      - "delete data"
-      - "spend money"
-      - "change permissions"
+      - "merge-pull-request"
+      - "approve-product-design-decision"
+      - "deploy-production"
+      - "delete-data"
+      - "spend-money"
+      - "change-permissions"
   failurePolicy:
     onBudgetExceeded: stop-run
     onUnsafeAction: block

@@ -1,0 +1,20 @@
+{
+  "name": "loop-engineering",
+  "interface": {
+    "displayName": "Loop-Engineering"
+  },
+  "plugins": [
+    {
+      "name": "loop-engineering",
+      "source": {
+        "source": "url",
+        "url": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

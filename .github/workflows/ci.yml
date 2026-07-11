@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
 
 jobs:
   test:
@@ -15,6 +17,7 @@ jobs:
         node-version:
           - 20
           - 22
+          - 24
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,5 +25,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      - run: npm run build
+      - run: git diff --exit-code -- adapters templates
       - run: npm run smoke
       - run: npm pack --dry-run
+      - run: npm audit --omit=dev
