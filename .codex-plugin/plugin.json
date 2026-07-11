@@ -1,0 +1,41 @@
+{
+  "name": "loop-engineering",
+  "version": "1.0.0",
+  "description": "Design, operate, verify, recover, and empirically improve durable agent loops.",
+  "author": {
+    "name": "sheepxux",
+    "url": "https://github.com/sheepxux"
+  },
+  "homepage": "https://github.com/sheepxux/Loop-Engineering",
+  "repository": "https://github.com/sheepxux/Loop-Engineering",
+  "license": "MIT",
+  "keywords": [
+    "agent-skills",
+    "loop-engineering",
+    "strategy-evolution",
+    "verification",
+    "automation"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Loop-Engineering",
+    "shortDescription": "Verified, durable agent loops with controlled strategy evolution",
+    "longDescription": "Use Loop-Engineering to decide when a recurring agent loop is appropriate, design its contract, run bounded iterations, independently verify results, persist state, recover failures, and improve task strategy through matched benchmarks.",
+    "developerName": "sheepxux",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Design a safe recurring agent loop for this task.",
+      "Review this loop contract and find unsafe gaps.",
+      "Build a benchmark-gated strategy evolution loop."
+    ],
+    "websiteURL": "https://github.com/sheepxux/Loop-Engineering",
+    "brandColor": "#000000",
+    "logo": "./docs/assets/cover.png",
+    "screenshots": []
+  }
+}

@@ -40,7 +40,7 @@ The pattern scales: Stripe's Minions pipeline merges over a thousand PRs a week 
 
 Practitioner criticism of the loop hype is specific, and Loop-Engineering should agree with it rather than argue.
 
-**Loops are overrated where topology is underrated.** Feedback-dense, single-goal tasks — CI triage, dependency updates, QA passes — are well served by a simple loop, and that is exactly the 80% use case the current v0.3.x release targets. Genuinely hard work is a graph of deeply coupled subtasks where agents get lost three levels deep. The v1 protocol deliberately models a single-lane loop: discover N bounded items, process them one at a time. It does not model dependency graphs between items, and it should not pretend to. If that expressiveness ever comes, it is a protocol extension (item dependencies, convergence checks), not a rendering trick.
+**Loops are overrated where topology is underrated.** Feedback-dense, single-goal tasks — CI triage, dependency updates, QA passes — are well served by a simple loop, and that is the 80% use case v1 targets. Genuinely hard work is a graph of deeply coupled subtasks where agents get lost three levels deep. Protocol v1 deliberately models a single-lane loop: discover N bounded items, process them one at a time. It does not model dependency graphs between items, and it should not pretend to. If that expressiveness comes later, it is a protocol extension, not a rendering trick.
 
 **Long-running is not the same as hard.** Loop-Engineering optimizes for many small, bounded, resumable iterations — the nine-minute run that lands evidence and updates state — not for thirty-hour demo curves. The budgets exist to force that shape.
 
@@ -48,11 +48,11 @@ Practitioner criticism of the loop hype is specific, and Loop-Engineering should
 
 **Multi-agent systems stay healthy by replacing context, not accumulating it.** Agents are Markovian; early errors compound, and self-review amplifies them. Loop-Engineering's architecture already assumes this: state lives outside the model, every run starts a fresh worker from `state.json`, and the evaluator never shares the worker's context. The local Runner preserves the same substrate; provider-native worker rebuilding remains a later extension.
 
-**Model self-improvement is unproven; measurable strategy evolution is narrower.** Loop-Engineering does not claim loops make models better. It makes work *accumulate*, and v0.3 can evolve only the external task strategy: propose one candidate, compare it with the active strategy on matched samples, and promote it only when an independent evaluator supplies evidence above a configured threshold. The reward stays external — tests, checks, metrics, evidence, and humans at gates.
+**Model self-improvement is unproven; measurable strategy evolution is narrower.** Loop-Engineering does not claim loops make models better. It makes work *accumulate*, and v1 can evolve only the external task strategy: propose one candidate, compare it with the active strategy on a frozen matched benchmark, mechanically recompute scores, and promote it only when independent evidence exceeds a configured threshold. The reward stays external — tests, checks, metrics, evidence, and humans at gates.
 
 ## What this means for the roadmap
 
-- Current (`v0.3.x`): protocol v1, validator, executor skills, benchmark-gated task-strategy evolution, and a local Runner with leases, interval scheduling, durable events, and opt-in command execution.
+- Current (`v1.0.x`): complete canonical Skill, protocol v1, evidence-bound evaluator artifacts, digest-bound strategy approval and rollback, and a local Runner with leases, interval scheduling, durable events, and opt-in command execution.
 - Next: provider-native executors, human gate files, richer scheduling, and worker rebuild with state inheritance.
 - Later: process-level checkpoint evidence in the verification contract, and dependency-aware item graphs if real loops demand them.
 

@@ -1,63 +1,80 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/sheepxux/Loop-Engineering/v0.3.0/protocol/run-log.schema.json",
+  "$id": "https://raw.githubusercontent.com/sheepxux/Loop-Engineering/v1.0.0/protocol/run-log.schema.json",
   "title": "Loop Run Log",
   "type": "object",
   "additionalProperties": false,
-  "required": ["apiVersion", "loop", "runId", "startedAt", "status", "discovered", "results"],
+  "required": ["apiVersion", "loop", "runId", "startedAt", "finishedAt", "status", "discovered", "results", "budget"],
   "properties": {
-    "apiVersion": {
-      "type": "string",
-      "const": "loop-engineering/v1"
-    },
-    "loop": {
-      "type": "string"
-    },
-    "runId": {
-      "type": "string"
-    },
-    "startedAt": {
-      "type": "string"
-    },
-    "finishedAt": {
-      "type": ["string", "null"]
-    },
+    "apiVersion": { "type": "string", "const": "loop-engineering/v1" },
+    "loop": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 3, "pattern": "^[A-Za-z0-9._:-]+$" },
+    "startedAt": { "type": "string", "minLength": 20 },
+    "finishedAt": { "type": ["string", "null"] },
     "status": {
       "type": "string",
-      "enum": ["running", "passed", "failed", "blocked", "budget-exceeded"]
+      "enum": ["running", "passed", "failed", "blocked", "needs-human", "budget-exceeded", "no-work", "dry-run"]
     },
     "discovered": {
       "type": "array",
       "items": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "summary", "source"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 },
+          "source": { "type": "string", "minLength": 1 }
+        }
       }
     },
     "results": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["itemId", "verdict"],
+        "additionalProperties": false,
+        "required": ["itemId", "verdict", "summary", "evaluator"],
         "properties": {
-          "itemId": {
-            "type": "string"
-          },
+          "itemId": { "type": "string", "minLength": 1 },
           "verdict": {
             "type": "string",
             "enum": ["pass", "fail", "blocked", "needs-human"]
           },
-          "summary": {
-            "type": "string"
+          "summary": { "type": "string", "minLength": 1 },
+          "evaluator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["artifact", "sha256", "contextId"],
+            "properties": {
+              "artifact": { "type": "string", "minLength": 1 },
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "contextId": { "type": "string", "minLength": 1 }
+            }
           }
         }
       }
     },
     "budget": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtimeMinutes", "itemsAttempted", "estimatedUsd"],
+      "properties": {
+        "runtimeMinutes": { "type": "number", "minimum": 0 },
+        "itemsAttempted": { "type": "integer", "minimum": 0 },
+        "estimatedUsd": { "type": "number", "minimum": 0 }
+      }
     },
     "metrics": {
       "type": "object",
-      "additionalProperties": {
-        "type": "number"
+      "additionalProperties": { "type": "number" }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "summary"],
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1 }
       }
     }
   }

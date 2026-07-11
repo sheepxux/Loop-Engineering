@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { main } from "../src/cli.js";
-import { readData, writeJson } from "../src/fs-utils.js";
-import { nextRun, recordExperiment, recordRun, resolveLoop } from "../src/loop-state.js";
+import { readData, sha256File, sha256Json, writeJson } from "../src/fs-utils.js";
+import { nextRun, recordExperiment, recordRun, resolveLoop, rollbackStrategy } from "../src/loop-state.js";
 
 function initLoop() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "loop-engineering-runtime-"));
@@ -46,12 +46,26 @@ function developmentRunLog(index, overrides = {}) {
 }
 
 function strategyExperiment(overrides = {}) {
-  return {
+  const experiment = {
     apiVersion: "loop-engineering/v1",
     loop: "self-improving-development",
     experimentId: "reproduction-first-v2",
     metric: "verified-pass-rate",
-    baseline: { version: 1, score: 0.6, samples: 3 },
+    benchmark: {
+      manifest: "benchmarks/manifest.json",
+      sha256: "",
+      caseIds: ["case-1", "case-2", "case-3"]
+    },
+    baseline: {
+      version: 1,
+      score: 0.6,
+      samples: 3,
+      results: [
+        { caseId: "case-1", score: 0.5, verdict: "pass", artifact: "benchmarks/baseline-case-1.json", sha256: "" },
+        { caseId: "case-2", score: 0.6, verdict: "pass", artifact: "benchmarks/baseline-case-2.json", sha256: "" },
+        { caseId: "case-3", score: 0.7, verdict: "pass", artifact: "benchmarks/baseline-case-3.json", sha256: "" }
+      ]
+    },
     candidate: {
       strategy: {
         apiVersion: "loop-engineering/v1",
@@ -63,12 +77,85 @@ function strategyExperiment(overrides = {}) {
         createdAt: null
       },
       score: 0.8,
-      samples: 3
+      samples: 3,
+      results: [
+        { caseId: "case-1", score: 0.7, verdict: "pass", artifact: "benchmarks/candidate-case-1.json", sha256: "" },
+        { caseId: "case-2", score: 0.8, verdict: "pass", artifact: "benchmarks/candidate-case-2.json", sha256: "" },
+        { caseId: "case-3", score: 0.9, verdict: "pass", artifact: "benchmarks/candidate-case-3.json", sha256: "" }
+      ]
     },
     evidence: [{ command: "npm test", exitCode: 0, summary: "Matched benchmark passed." }],
     recommendation: "promote",
     ...overrides
   };
+  return experiment;
+}
+
+function bindEvaluatorEvidence(loop, log) {
+  const next = structuredClone(log);
+  for (const result of next.results) {
+    const contextId = `eval-${next.runId}-${result.itemId}`;
+    const artifact = path.join(loop.loopDir, "evaluators", `${slug(next.runId)}-${slug(result.itemId)}.json`);
+    const evidence = loop.spec.verification.requiredEvidence.map((type) => ({
+      type,
+      summary: `${type} evidence captured.`
+    }));
+    for (const command of loop.spec.verification.commands) {
+      evidence.push({ type: "command", summary: `${command} completed.`, command, exitCode: result.verdict === "pass" ? 0 : 1 });
+    }
+    writeJson(artifact, {
+      apiVersion: "loop-engineering/v1",
+      loop: loop.spec.metadata.name,
+      itemId: result.itemId,
+      evaluator: {
+        identity: loop.spec.verification.evaluator,
+        contextId,
+        evaluatedAt: next.finishedAt
+      },
+      verdict: result.verdict,
+      evidence,
+      reasons: result.verdict === "pass" ? [] : [result.summary],
+      nextAction: result.verdict === "pass" ? "accept" : "retry"
+    });
+    result.evaluator = {
+      artifact: path.relative(loop.loopDir, artifact),
+      sha256: sha256File(artifact),
+      contextId
+    };
+  }
+  return next;
+}
+
+function materializeExperiment(loop, experiment) {
+  const next = structuredClone(experiment);
+  const manifest = path.join(loop.loopDir, next.benchmark.manifest);
+  writeJson(manifest, { caseIds: next.benchmark.caseIds });
+  next.benchmark.sha256 = sha256File(manifest);
+  for (const arm of [next.baseline, next.candidate]) {
+    for (const result of arm.results) {
+      const artifact = path.join(loop.loopDir, result.artifact);
+      writeJson(artifact, { caseId: result.caseId, score: result.score, verdict: result.verdict });
+      result.sha256 = sha256File(artifact);
+    }
+  }
+  return next;
+}
+
+function approvalFor(experiment) {
+  return {
+    apiVersion: "loop-engineering/v1",
+    loop: experiment.loop,
+    experimentId: experiment.experimentId,
+    experimentSha256: sha256Json(experiment),
+    baselineVersion: experiment.baseline.version,
+    approver: "human-reviewer",
+    approvedAt: new Date(Date.now() + 1_000).toISOString(),
+    reason: "Matched benchmark evidence exceeded the configured threshold."
+  };
+}
+
+function slug(value) {
+  return String(value).replace(/[^A-Za-z0-9._-]+/g, "-");
 }
 
 test("next reports full budget for a fresh loop", async () => {
@@ -85,7 +172,7 @@ test("record files the run log and updates state budgets and items", async () =>
   const loopDir = await initLoop();
   const loop = resolveLoop(loopDir);
   const now = new Date("2026-07-10T02:00:00Z");
-  const outcome = recordRun(loop, runLog(), { now });
+  const outcome = recordRun(loop, bindEvaluatorEvidence(loop, runLog()), { now });
 
   assert.equal(fs.existsSync(outcome.runFile), true);
   const state = readData(path.join(loopDir, "state.json"));
@@ -98,13 +185,23 @@ test("record files the run log and updates state budgets and items", async () =>
 
 test("record increments retries on repeated failure and next queues the retry", async () => {
   const loopDir = await initLoop();
+  const loop = resolveLoop(loopDir);
   const now = new Date("2026-07-10T02:00:00Z");
   const failing = { itemId: "run-102", verdict: "fail", summary: "did not compile" };
 
-  recordRun(resolveLoop(loopDir), runLog({ results: [failing], discovered: [] }), { now });
+  recordRun(loop, bindEvaluatorEvidence(loop, runLog({
+    results: [failing],
+    discovered: [{ id: "run-102", summary: "compile failure", source: "github-actions" }],
+    status: "failed"
+  })), { now });
   recordRun(
-    resolveLoop(loopDir),
-    runLog({ runId: "2026-07-10T0200Z", results: [failing], discovered: [] }),
+    loop,
+    bindEvaluatorEvidence(loop, runLog({
+      runId: "2026-07-10T0200Z",
+      results: [failing],
+      discovered: [],
+      status: "failed"
+    })),
     { now }
   );
 
@@ -121,9 +218,10 @@ test("record increments retries on repeated failure and next queues the retry", 
 
 test("next resets daily budgets on UTC day rollover", async () => {
   const loopDir = await initLoop();
+  const loop = resolveLoop(loopDir);
   const runDay = new Date("2026-07-10T02:00:00Z");
-  recordRun(resolveLoop(loopDir), runLog(), { now: runDay });
-  recordRun(resolveLoop(loopDir), runLog({ runId: "2026-07-10T0200Z" }), { now: runDay });
+  recordRun(loop, bindEvaluatorEvidence(loop, runLog()), { now: runDay });
+  recordRun(loop, bindEvaluatorEvidence(loop, runLog({ runId: "2026-07-10T0200Z" })), { now: runDay });
 
   const sameDay = nextRun(resolveLoop(loopDir), runDay);
   assert.equal(sameDay.ok, false);
@@ -155,21 +253,32 @@ test("record rejects run logs that violate the schema or the spec", async () => 
   const loop = resolveLoop(loopDir);
 
   assert.throws(() => recordRun(loop, runLog({ status: "nope" })), /run-log\.schema\.json/);
-  assert.throws(() => recordRun(loop, runLog({ loop: "other-loop" })), /does not match spec loop/);
+  assert.throws(
+    () => recordRun(loop, bindEvaluatorEvidence(loop, runLog({ loop: "other-loop" }))),
+    /does not match spec loop/
+  );
 
   const tooMany = Array.from({ length: 4 }, (_, index) => ({
     itemId: `run-${index}`,
-    verdict: "pass"
+    verdict: "pass",
+    summary: "verified"
   }));
-  assert.throws(() => recordRun(loop, runLog({ results: tooMany })), /maxItemsPerRun/);
+  const discovered = tooMany.map((item) => ({ id: item.itemId, summary: "item", source: "manual" }));
+  const oversized = bindEvaluatorEvidence(loop, runLog({
+    results: tooMany,
+    discovered,
+    budget: { runtimeMinutes: 20, itemsAttempted: 4, estimatedUsd: 1.5 }
+  }));
+  assert.throws(() => recordRun(loop, oversized), /maxItemsPerRun/);
 });
 
 test("record refuses to overwrite an existing run log without force", async () => {
   const loopDir = await initLoop();
+  const loop = resolveLoop(loopDir);
   const now = new Date("2026-07-10T02:00:00Z");
-  recordRun(resolveLoop(loopDir), runLog(), { now });
-  assert.throws(() => recordRun(resolveLoop(loopDir), runLog(), { now }), /--force/);
-  recordRun(resolveLoop(loopDir), runLog(), { now, force: true });
+  recordRun(loop, bindEvaluatorEvidence(loop, runLog()), { now });
+  assert.throws(() => recordRun(loop, bindEvaluatorEvidence(loop, runLog()), { now }), /--force/);
+  recordRun(loop, bindEvaluatorEvidence(loop, runLog()), { now, force: true });
 });
 
 test("evolution-enabled init creates an active strategy and experiment directory", async () => {
@@ -205,7 +314,9 @@ test("next marks strategy evolution due after the configured number of runs", as
   const loop = resolveLoop(path.join(tmp, "self-improving-development"));
   const now = new Date("2026-07-10T10:00:00Z");
   for (let index = 1; index <= 3; index += 1) {
-    recordRun(loop, developmentRunLog(index), { now });
+    recordRun(loop, bindEvaluatorEvidence(loop, developmentRunLog(index, {
+      discovered: [{ id: `feature-${index}`, summary: "feature", source: "manual" }]
+    })), { now });
   }
 
   const plan = nextRun(loop, now);
@@ -227,14 +338,30 @@ test("human-reviewed strategy evolution stages then promotes a benchmark winner"
   ]);
   const loopDir = path.join(tmp, "self-improving-development");
   const loop = resolveLoop(loopDir);
-  const experiment = strategyExperiment();
+  const experiment = materializeExperiment(loop, strategyExperiment());
 
   const staged = recordExperiment(loop, experiment);
   assert.equal(staged.assessment.outcome, "pending-review");
   assert.equal(readData(path.join(loopDir, "strategy.json")).version, 1);
-  assert.equal(readData(path.join(loopDir, "state.json")).evolution.pendingExperiment, experiment.experimentId);
+  assert.equal(readData(path.join(loopDir, "state.json")).evolution.pendingExperiment.experimentId, experiment.experimentId);
 
-  const promoted = recordExperiment(loop, experiment, { approve: true });
+  const experimentInput = path.join(loopDir, "experiment-input.json");
+  const approvalPath = path.join(loopDir, "approval.json");
+  writeJson(experimentInput, experiment);
+  await main([
+    "approval",
+    "create",
+    loopDir,
+    "--experiment",
+    experimentInput,
+    "--approver",
+    "human-reviewer",
+    "--reason",
+    "Matched benchmark evidence passed review.",
+    "--out",
+    approvalPath
+  ]);
+  const promoted = recordExperiment(loop, experiment, { approval: readData(approvalPath) });
   assert.equal(promoted.assessment.outcome, "promoted");
   assert.equal(readData(path.join(loopDir, "strategy.json")).version, 2);
   const state = readData(path.join(loopDir, "state.json"));
@@ -254,16 +381,82 @@ test("strategy evolution rejects candidates below the configured improvement thr
     tmp
   ]);
   const loopDir = path.join(tmp, "self-improving-development");
-  const experiment = strategyExperiment({
-    experimentId: "weak-v2",
-    candidate: {
-      ...strategyExperiment().candidate,
-      score: 0.65
-    }
-  });
-  const outcome = recordExperiment(resolveLoop(loopDir), experiment);
+  const loop = resolveLoop(loopDir);
+  const raw = strategyExperiment({ experimentId: "weak-v2" });
+  raw.candidate.score = 0.65;
+  raw.candidate.results[0].score = 0.6;
+  raw.candidate.results[1].score = 0.65;
+  raw.candidate.results[2].score = 0.7;
+  const experiment = materializeExperiment(loop, raw);
+  const outcome = recordExperiment(loop, experiment);
   assert.equal(outcome.assessment.outcome, "rejected");
   assert.equal(readData(path.join(loopDir, "strategy.json")).version, 1);
+});
+
+test("strategy approval is bound to the exact staged experiment digest", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "loop-engineering-evolution-approval-"));
+  await main([
+    "init",
+    "self-improving-development",
+    "--from",
+    "examples/self-improving-development/loop.yaml",
+    "--out",
+    tmp
+  ]);
+  const loop = resolveLoop(path.join(tmp, "self-improving-development"));
+  const experiment = materializeExperiment(loop, strategyExperiment());
+  recordExperiment(loop, experiment);
+  const tampered = structuredClone(experiment);
+  tampered.candidate.strategy.instructions += " Then skip a check.";
+
+  assert.throws(
+    () => recordExperiment(loop, tampered, { approval: approvalFor(experiment) }),
+    /currently pending experiment digest/
+  );
+});
+
+test("strategy rollback restores archived behavior as a new monotonic version", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "loop-engineering-evolution-rollback-"));
+  await main([
+    "init",
+    "self-improving-development",
+    "--from",
+    "examples/self-improving-development/loop.yaml",
+    "--out",
+    tmp
+  ]);
+  const loop = resolveLoop(path.join(tmp, "self-improving-development"));
+  const original = readData(path.join(loop.loopDir, "strategy.json"));
+  const experiment = materializeExperiment(loop, strategyExperiment());
+  recordExperiment(loop, experiment);
+  recordExperiment(loop, experiment, { approval: approvalFor(experiment) });
+
+  const outcome = rollbackStrategy(loop, 1, {
+    actor: "human-reviewer",
+    reason: "Post-promotion evidence regressed."
+  });
+  assert.equal(outcome.strategy.version, 3);
+  assert.equal(outcome.restoredFromVersion, 1);
+  assert.equal(outcome.strategy.instructions, original.instructions);
+  assert.equal(fs.existsSync(path.join(loop.loopDir, "strategies", "v3.json")), true);
+  assert.equal(outcome.state.evolution.rollbackHistory.length, 1);
+});
+
+test("record fails closed on empty success and hard budget overruns", async () => {
+  const loopDir = await initLoop();
+  const loop = resolveLoop(loopDir);
+  const emptySuccess = runLog({
+    status: "passed",
+    discovered: [],
+    results: [],
+    budget: { runtimeMinutes: 1, itemsAttempted: 0, estimatedUsd: 0 }
+  });
+  assert.throws(() => recordRun(loop, emptySuccess), /passed run requires at least one result/);
+
+  const expensive = bindEvaluatorEvidence(loop, runLog({
+    budget: { runtimeMinutes: 20, itemsAttempted: 1, estimatedUsd: 999 }
+  }));
+  assert.throws(() => recordRun(loop, expensive), /exceeds maxEstimatedUsdPerRun/);
 });
 
 test("check validates data files against protocol schemas", async () => {
@@ -280,7 +473,7 @@ test("check validates data files against protocol schemas", async () => {
 test("rendered executor skill is an operational playbook", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "loop-engineering-skill-"));
   await main(["render", "codex", "examples/ci-triage/loop.yaml", "--out", tmp]);
-  const skill = fs.readFileSync(path.join(tmp, "codex", "loop-engineering", "SKILL.md"), "utf8");
+  const skill = fs.readFileSync(path.join(tmp, ".agents", "skills", "ci-triage", "SKILL.md"), "utf8");
 
   assert.match(skill, /loopctl next \.loop-engineering\/loops\/ci-triage/);
   assert.match(skill, /loopctl record \.loop-engineering\/loops\/ci-triage --run/);
@@ -292,7 +485,7 @@ test("rendered executor skill is an operational playbook", async () => {
 test("rendered evolution skill loads strategy and uses benchmark-gated promotion", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "loop-engineering-evolution-skill-"));
   await main(["render", "codex", "examples/self-improving-development/loop.yaml", "--out", tmp]);
-  const skill = fs.readFileSync(path.join(tmp, "codex", "loop-engineering", "SKILL.md"), "utf8");
+  const skill = fs.readFileSync(path.join(tmp, ".agents", "skills", "self-improving-development", "SKILL.md"), "utf8");
 
   assert.match(skill, /strategy\.json/);
   assert.match(skill, /loopctl evolve/);
@@ -309,11 +502,14 @@ test("rendered chatgpt adapter is an advisor, not an executor", async () => {
   assert.doesNotMatch(instructions, /git worktree/);
 });
 
-test("github-actions workflow gates the run on loopctl next", async () => {
+test("github-actions scaffold is manual, read-only, and gates on loopctl next", async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "loop-engineering-gha-"));
-  await main(["render", "github-actions", "examples/ci-triage/loop.yaml", "--out", tmp]);
+  await main(["render", "github-actions-scaffold", "examples/ci-triage/loop.yaml", "--out", tmp]);
   const workflow = fs.readFileSync(path.join(tmp, ".github", "workflows", "ci-triage.yml"), "utf8");
 
-  assert.match(workflow, /loopctl next \.loop-engineering\/loops\/ci-triage/);
+  assert.match(workflow, /loopctl next '\.loop-engineering\/loops\/ci-triage'/);
   assert.match(workflow, /if: steps\.next\.outputs\.ok == 'true'/);
+  assert.match(workflow, /permissions:\n  contents: read/);
+  assert.doesNotMatch(workflow, /schedule:/);
+  assert.match(workflow, /intentionally performs preflight only/);
 });

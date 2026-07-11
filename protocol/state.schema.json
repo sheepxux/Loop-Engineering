@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/sheepxux/Loop-Engineering/v0.3.0/protocol/state.schema.json",
+  "$id": "https://raw.githubusercontent.com/sheepxux/Loop-Engineering/v1.0.0/protocol/state.schema.json",
   "title": "Loop State",
   "type": "object",
   "additionalProperties": false,
@@ -83,7 +83,8 @@
         "consecutiveFailures",
         "pendingExperiment",
         "observations",
-        "history"
+        "history",
+        "rollbackHistory"
       ],
       "properties": {
         "currentStrategyVersion": {
@@ -99,7 +100,21 @@
           "minimum": 0
         },
         "pendingExperiment": {
-          "type": ["string", "null"]
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["experimentId", "sha256", "baselineVersion", "candidateVersion", "stagedAt"],
+              "properties": {
+                "experimentId": { "type": "string" },
+                "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+                "baselineVersion": { "type": "integer", "minimum": 1 },
+                "candidateVersion": { "type": "integer", "minimum": 2 },
+                "stagedAt": { "type": "string" }
+              }
+            }
+          ]
         },
         "observations": {
           "type": "array",
@@ -119,9 +134,10 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["experimentId", "outcome", "baselineVersion", "candidateVersion", "improvement"],
+            "required": ["experimentId", "sha256", "outcome", "baselineVersion", "candidateVersion", "improvement"],
             "properties": {
               "experimentId": { "type": "string" },
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
               "outcome": {
                 "type": "string",
                 "enum": ["promoted", "rejected", "pending-review"]
@@ -129,6 +145,22 @@
               "baselineVersion": { "type": "integer", "minimum": 1 },
               "candidateVersion": { "type": "integer", "minimum": 2 },
               "improvement": { "type": "number" }
+            }
+          }
+        },
+        "rollbackHistory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["fromVersion", "restoredFromVersion", "newVersion", "actor", "reason", "at"],
+            "properties": {
+              "fromVersion": { "type": "integer", "minimum": 1 },
+              "restoredFromVersion": { "type": "integer", "minimum": 1 },
+              "newVersion": { "type": "integer", "minimum": 2 },
+              "actor": { "type": "string", "minLength": 1 },
+              "reason": { "type": "string", "minLength": 3 },
+              "at": { "type": "string" }
             }
           }
         }

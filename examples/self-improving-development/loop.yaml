@@ -83,17 +83,17 @@ safety:
     onRepeatedFailure: move-to-inbox
   humanGates:
     autoAllowed:
-      - "read repository"
-      - "write isolated worktree"
-      - "run tests"
+      - "read-repository"
+      - "write-isolated-worktree"
+      - "run-tests"
     needsReview:
-      - "promote task strategy"
+      - "promote-task-strategy"
     humanOnly:
-      - "merge pull request"
-      - "deploy production"
-      - "delete data"
-      - "spend money"
-      - "change permissions"
+      - "merge-pull-request"
+      - "deploy-production"
+      - "delete-data"
+      - "spend-money"
+      - "change-permissions"
   failurePolicy:
     onBudgetExceeded: stop-run
     onUnsafeAction: block

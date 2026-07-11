@@ -1,11 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
-import { copyFile, readData, readText, repoRoot, schemaPath, writeJson, writeText, writeYaml } from "./fs-utils.js";
+import { copyFile, readData, readText, repoRoot, schemaPath, sha256Json, writeJson, writeText, writeYaml } from "./fs-utils.js";
 import { runDoctor } from "./doctor.js";
 import { initialEvolutionState, initialStrategy } from "./evolution.js";
-import { nextRun, recordExperiment, recordRun, resolveLoop } from "./loop-state.js";
+import { nextRun, recordExperiment, recordRun, resolveLoop, rollbackStrategy } from "./loop-state.js";
 import { renderAdapter, RENDERERS } from "./renderers.js";
 import { listRuns, setPaused, statusLoops } from "./runner.js";
+import {
+  CANONICAL_SKILL_DIR,
+  installCanonicalSkill,
+  SKILL_PLATFORMS,
+  validateSkillPackage
+} from "./skill-package.js";
 import { validateData, validateLoopFile, validateLoopSpec } from "./validation.js";
 
 export async function main(argv) {
@@ -55,6 +61,15 @@ export async function main(argv) {
   if (command === "doctor") {
     return doctorCommand();
   }
+  if (command === "skill") {
+    return skillCommand(rest);
+  }
+  if (command === "strategy") {
+    return strategyCommand(rest);
+  }
+  if (command === "approval") {
+    return approvalCommand(rest);
+  }
 
   throw new Error(`Unknown command "${command}". Run loopctl --help.`);
 }
@@ -83,18 +98,19 @@ function initCommand(args) {
   }
 
   const options = parseOptions(args.slice(1));
-  const source = options.from || path.join(repoRoot, "templates", "loop.yaml");
+  const source = options.from || path.join(repoRoot, "skills", "loop-engineering", "assets", "loop.yaml");
   const outRoot = options.out || ".loop-engineering/loops";
   const force = options.force === true;
   const spec = readData(source);
   spec.metadata.name = name;
-  spec.persistence.statePath = path.join(outRoot, name, "state.json");
-  spec.persistence.runLogDir = path.join(outRoot, name, "runs");
-  spec.persistence.inboxPath = path.join(outRoot, name, "inbox.md");
-  spec.persistence.decisionsPath = path.join(outRoot, name, "decisions.md");
+  const contractRoot = path.posix.join(".loop-engineering", "loops", name);
+  spec.persistence.statePath = path.posix.join(contractRoot, "state.json");
+  spec.persistence.runLogDir = path.posix.join(contractRoot, "runs");
+  spec.persistence.inboxPath = path.posix.join(contractRoot, "inbox.md");
+  spec.persistence.decisionsPath = path.posix.join(contractRoot, "decisions.md");
   if (spec.evolution?.enabled) {
-    spec.persistence.strategyPath = path.join(outRoot, name, "strategy.json");
-    spec.persistence.experimentDir = path.join(outRoot, name, "experiments");
+    spec.persistence.strategyPath = path.posix.join(contractRoot, "strategy.json");
+    spec.persistence.experimentDir = path.posix.join(contractRoot, "experiments");
   }
   spec.schedule.concurrency.group = name;
   if (spec.handoff?.worktree?.branchPrefix) {
@@ -115,6 +131,7 @@ function initCommand(args) {
   fs.mkdirSync(path.join(loopDir, "runs"), { recursive: true });
   if (spec.evolution?.enabled) {
     fs.mkdirSync(path.join(loopDir, "experiments"), { recursive: true });
+    fs.mkdirSync(path.join(loopDir, "strategies"), { recursive: true });
   }
   writeYaml(path.join(loopDir, "loop.yaml"), spec);
   const state = {
@@ -132,7 +149,9 @@ function initCommand(args) {
   };
   if (spec.evolution?.enabled) {
     state.evolution = initialEvolutionState();
-    writeJson(path.join(loopDir, "strategy.json"), initialStrategy(spec, name));
+    const strategy = initialStrategy(spec, name);
+    writeJson(path.join(loopDir, "strategy.json"), strategy);
+    writeJson(path.join(loopDir, "strategies", "v1.json"), strategy);
   }
   writeJson(path.join(loopDir, "state.json"), state);
   writeText(path.join(loopDir, "inbox.md"), `# ${name} Inbox\n\nBlocked or human-review items land here.\n`);
@@ -215,13 +234,14 @@ function evolveCommand(args) {
   const target = args[0];
   const options = parseOptions(args.slice(1));
   if (!target || !options.experiment || options.experiment === true) {
-    throw new Error("Usage: loopctl evolve <loop-dir|loop.yaml> --experiment <experiment.json> [--approve] [--force]");
+    throw new Error("Usage: loopctl evolve <loop-dir|loop.yaml> --experiment <experiment.json> [--approval <approval.json>] [--force]");
   }
 
   const loop = resolveLoop(target);
   const experiment = readData(options.experiment);
+  const approval = typeof options.approval === "string" ? readData(options.approval) : null;
   const outcome = recordExperiment(loop, experiment, {
-    approve: options.approve === true,
+    approval,
     force: options.force === true
   });
 
@@ -230,7 +250,7 @@ function evolveCommand(args) {
   if (outcome.assessment.outcome === "promoted") {
     console.log(`Promoted strategy v${outcome.assessment.candidateVersion}: ${outcome.strategyPath}`);
   } else if (outcome.assessment.outcome === "pending-review") {
-    console.log("Candidate passed the metric gate and is waiting for human approval. Re-run with --approve.");
+    console.log("Candidate passed the metric gate and is waiting for a digest-bound approval artifact. Re-run with --approval <approval.json>.");
   } else {
     console.log("Candidate was not promoted; the current strategy remains active.");
   }
@@ -298,7 +318,7 @@ function checkCommand(args) {
   const schemaName = args[0];
   const files = args.slice(1);
   if (!schemaName || files.length === 0) {
-    throw new Error("Usage: loopctl check <loop|state|evaluator|run-log|strategy|experiment> <file...>");
+    throw new Error("Usage: loopctl check <loop|state|evaluator|run-log|strategy|experiment|approval> <file...>");
   }
 
   let failed = false;
@@ -320,6 +340,109 @@ function doctorCommand() {
   if (!result.ok) {
     process.exitCode = 1;
   }
+}
+
+function skillCommand(args) {
+  const action = args[0];
+  if (action === "validate") {
+    const target = args[1] && !args[1].startsWith("--") ? args[1] : CANONICAL_SKILL_DIR;
+    const options = parseOptions(args.slice(target === CANONICAL_SKILL_DIR ? 1 : 2));
+    const result = validateSkillPackage(target);
+    if (options.json === true) {
+      console.log(JSON.stringify(result, null, 2));
+    } else if (result.ok) {
+      console.log(`OK Skill ${result.metadata.name} (${result.lineCount} lines): ${result.skillDir}`);
+      for (const warning of result.warnings) console.log(`WARN ${warning}`);
+    } else {
+      console.error(`FAIL Skill: ${result.skillDir}`);
+      for (const error of result.errors) console.error(`- ${error}`);
+    }
+    if (!result.ok) process.exitCode = 1;
+    return;
+  }
+
+  if (action === "install") {
+    const platform = args[1];
+    if (!platform || (platform !== "both" && !SKILL_PLATFORMS.has(platform))) {
+      throw new Error("Usage: loopctl skill install <codex|claude-code|both> [--scope project|user] [--out D] [--force]");
+    }
+    const options = parseOptions(args.slice(2));
+    const platforms = platform === "both" ? [...SKILL_PLATFORMS] : [platform];
+    for (const target of platforms) {
+      const result = installCanonicalSkill({
+        platform: target,
+        scope: typeof options.scope === "string" ? options.scope : "project",
+        outDir: typeof options.out === "string" ? path.join(options.out, target) : null,
+        force: options.force === true
+      });
+      console.log(`Installed ${target} Skill: ${result.destination}`);
+    }
+    return;
+  }
+
+  if (action === "path") {
+    console.log(CANONICAL_SKILL_DIR);
+    return;
+  }
+
+  throw new Error("Usage: loopctl skill <validate [dir]|install <platform>|path>");
+}
+
+function strategyCommand(args) {
+  const action = args[0];
+  const target = args[1];
+  if (action !== "rollback" || !target) {
+    throw new Error("Usage: loopctl strategy rollback <loop-dir|loop.yaml> --to <version> --actor <name> --reason <text>");
+  }
+  const options = parseOptions(args.slice(2));
+  const version = Number(options.to);
+  const outcome = rollbackStrategy(resolveLoop(target), version, {
+    actor: typeof options.actor === "string" ? options.actor : "",
+    reason: typeof options.reason === "string" ? options.reason : ""
+  });
+  console.log(
+    `Restored behavior from strategy v${outcome.restoredFromVersion} as new strategy v${outcome.strategy.version}: ${outcome.strategyPath}`
+  );
+}
+
+function approvalCommand(args) {
+  const action = args[0];
+  const target = args[1];
+  const options = parseOptions(args.slice(2));
+  if (
+    action !== "create" ||
+    !target ||
+    typeof options.experiment !== "string" ||
+    typeof options.approver !== "string" ||
+    typeof options.reason !== "string" ||
+    typeof options.out !== "string"
+  ) {
+    throw new Error(
+      "Usage: loopctl approval create <loop-dir|loop.yaml> --experiment <file> --approver <name> --reason <text> --out <approval.json>"
+    );
+  }
+  const loop = resolveLoop(target);
+  const experiment = readData(options.experiment);
+  const digest = sha256Json(experiment);
+  const state = readData(loop.statePath);
+  const pending = state.evolution?.pendingExperiment;
+  if (!pending || pending.experimentId !== experiment.experimentId || pending.sha256 !== digest) {
+    throw new Error("The experiment is not the exact pending candidate recorded in loop state.");
+  }
+  const approval = {
+    apiVersion: "loop-engineering/v1",
+    loop: experiment.loop,
+    experimentId: experiment.experimentId,
+    experimentSha256: digest,
+    baselineVersion: experiment.baseline.version,
+    approver: options.approver,
+    approvedAt: new Date().toISOString(),
+    reason: options.reason
+  };
+  const validation = validateData("approval", approval, options.out);
+  if (!validation.ok) throw new Error(`Refusing to write invalid approval: ${validation.errors.join("; ")}`);
+  writeJson(options.out, approval);
+  console.log(`Wrote digest-bound approval: ${options.out}`);
 }
 
 function parseOptions(args) {
@@ -378,9 +501,14 @@ Commands:
   pause <loop-dir> [--reason TEXT]         Pause scheduling for a loop
   resume <loop-dir>                        Resume scheduling for a loop
   check <schema> <file...>                Validate data files against a protocol schema
-  schema <loop|state|evaluator|run-log|strategy|experiment>
+  schema <loop|state|evaluator|run-log|strategy|experiment|approval>
                                            Print or copy a protocol schema
   doctor                                  Check whether the repo is publish-ready
+  skill validate [dir] [--json]           Validate the canonical Agent Skill package
+  skill install <platform> [options]      Install Skill for codex, claude-code, or both
+  skill path                              Print the canonical Skill directory
+  strategy rollback <loop-dir> [options]  Restore archived strategy behavior as a new version
+  approval create <loop-dir> [options]    Create a human approval bound to a pending experiment
 
 Adapters:
   ${[...RENDERERS].join(", ")}

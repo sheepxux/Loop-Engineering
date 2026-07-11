@@ -1,20 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/sheepxux/Loop-Engineering/v0.3.0/protocol/evaluator.schema.json",
+  "$id": "https://raw.githubusercontent.com/sheepxux/Loop-Engineering/v1.0.0/protocol/evaluator.schema.json",
   "title": "Evaluator Result",
   "type": "object",
   "additionalProperties": false,
-  "required": ["apiVersion", "loop", "itemId", "verdict", "evidence", "reasons"],
+  "required": ["apiVersion", "loop", "itemId", "evaluator", "verdict", "evidence", "reasons"],
   "properties": {
-    "apiVersion": {
-      "type": "string",
-      "const": "loop-engineering/v1"
-    },
-    "loop": {
-      "type": "string"
-    },
-    "itemId": {
-      "type": "string"
+    "apiVersion": { "type": "string", "const": "loop-engineering/v1" },
+    "loop": { "type": "string", "minLength": 1 },
+    "itemId": { "type": "string", "minLength": 1 },
+    "evaluator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "contextId", "evaluatedAt"],
+      "properties": {
+        "identity": { "type": "string", "minLength": 1 },
+        "contextId": { "type": "string", "minLength": 1 },
+        "evaluatedAt": { "type": "string", "minLength": 20 }
+      }
     },
     "verdict": {
       "type": "string",
@@ -28,29 +31,18 @@
         "additionalProperties": false,
         "required": ["type", "summary"],
         "properties": {
-          "type": {
-            "type": "string"
-          },
-          "summary": {
-            "type": "string"
-          },
-          "path": {
-            "type": "string"
-          },
-          "command": {
-            "type": "string"
-          },
-          "exitCode": {
-            "type": ["integer", "null"]
-          }
+          "type": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "command": { "type": "string", "minLength": 1 },
+          "exitCode": { "type": ["integer", "null"] }
         }
       }
     },
     "reasons": {
       "type": "array",
-      "items": {
-        "type": "string"
-      }
+      "items": { "type": "string", "minLength": 1 }
     },
     "nextAction": {
       "type": "string",

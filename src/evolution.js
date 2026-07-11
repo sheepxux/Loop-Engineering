@@ -5,7 +5,8 @@ export function initialEvolutionState() {
     consecutiveFailures: 0,
     pendingExperiment: null,
     observations: [],
-    history: []
+    history: [],
+    rollbackHistory: []
   };
 }
 
@@ -59,6 +60,9 @@ export function updateEvolutionForRun(spec, prior, runLog) {
   }
 
   const next = structuredClone(prior || initialEvolutionState());
+  if (runLog.results.length === 0 || ["dry-run", "no-work", "budget-exceeded"].includes(runLog.status)) {
+    return next;
+  }
   next.runsSincePromotion += 1;
   next.consecutiveFailures = runSucceeded(runLog) ? 0 : next.consecutiveFailures + 1;
 
@@ -106,6 +110,7 @@ export function assessExperiment(spec, strategy, experiment, { approve = false }
   if (experiment.baseline.samples < minimumSamples || experiment.candidate.samples < minimumSamples) {
     throw new Error(`Baseline and candidate each require at least ${minimumSamples} sample(s).`);
   }
+  validateMatchedBenchmark(experiment);
 
   for (const command of config.evaluator.commands) {
     const evidence = experiment.evidence.find((item) => item.command === command);
@@ -144,6 +149,37 @@ export function assessExperiment(spec, strategy, experiment, { approve = false }
   };
 }
 
+function validateMatchedBenchmark(experiment) {
+  const expected = experiment.benchmark.caseIds;
+  if (new Set(expected).size !== expected.length) {
+    throw new Error("Benchmark caseIds must be unique.");
+  }
+  const baselineIds = experiment.baseline.results.map((result) => result.caseId);
+  const candidateIds = experiment.candidate.results.map((result) => result.caseId);
+  if (experiment.baseline.samples !== baselineIds.length || experiment.candidate.samples !== candidateIds.length) {
+    throw new Error("Experiment samples must equal the number of recorded case results.");
+  }
+  if (!sameIds(expected, baselineIds) || !sameIds(expected, candidateIds)) {
+    throw new Error("Baseline and candidate must evaluate the exact benchmark caseIds.");
+  }
+  const baselineScore = average(experiment.baseline.results.map((result) => result.score));
+  const candidateScore = average(experiment.candidate.results.map((result) => result.score));
+  if (Math.abs(baselineScore - experiment.baseline.score) > 1e-9) {
+    throw new Error(`Baseline score must be mechanically derived from case results (${baselineScore}).`);
+  }
+  if (Math.abs(candidateScore - experiment.candidate.score) > 1e-9) {
+    throw new Error(`Candidate score must be mechanically derived from case results (${candidateScore}).`);
+  }
+}
+
+function sameIds(expected, actual) {
+  return expected.length === actual.length && [...expected].sort().every((value, index) => value === [...actual].sort()[index]);
+}
+
+function average(values) {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
 function runSucceeded(runLog) {
-  return runLog.status === "passed" && runLog.results.every((result) => result.verdict === "pass");
+  return runLog.status === "passed" && runLog.results.length > 0 && runLog.results.every((result) => result.verdict === "pass");
 }

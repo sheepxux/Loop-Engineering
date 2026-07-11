@@ -8,7 +8,7 @@ export const RENDERERS = new Set([
   "chatgpt",
   "openclaw",
   "generic-harness",
-  "github-actions"
+  "github-actions-scaffold"
 ]);
 
 export function renderAdapter(adapter, spec, outDir) {
@@ -21,13 +21,20 @@ export function renderAdapter(adapter, spec, outDir) {
   if (adapter === "chatgpt") return renderChatGPT(spec, outDir);
   if (adapter === "openclaw") return renderOpenClaw(spec, outDir);
   if (adapter === "generic-harness") return renderGenericHarness(spec, outDir);
-  if (adapter === "github-actions") return renderGitHubActions(spec, outDir);
+  if (adapter === "github-actions-scaffold") return renderGitHubActionsScaffold(spec, outDir);
 }
 
 function renderCodex(spec, outDir) {
-  const skillDir = path.join(outDir, "codex", "loop-engineering");
+  const skillDir = path.join(outDir, ".agents", "skills", spec.metadata.name);
   writeYaml(path.join(skillDir, "loop.yaml"), spec);
   writeText(path.join(skillDir, "SKILL.md"), executorSkill("codex", spec));
+  writeYaml(path.join(skillDir, "agents", "openai.yaml"), {
+    interface: {
+      display_name: displayName(spec.metadata.name),
+      short_description: boundedShortDescription(spec.metadata.name),
+      default_prompt: `Use $${spec.metadata.name} to run one bounded, independently verified iteration.`
+    }
+  });
   writeText(path.join(skillDir, "worker-prompt.md"), workerPrompt(spec));
   writeText(path.join(skillDir, "evaluator-prompt.md"), evaluatorPrompt(spec));
   return [skillDir];
@@ -68,50 +75,48 @@ function renderGenericHarness(spec, outDir) {
   return [dir];
 }
 
-function renderGitHubActions(spec, outDir) {
+function renderGitHubActionsScaffold(spec, outDir) {
   const dir = path.join(outDir, ".github", "workflows");
   const file = path.join(dir, `${spec.metadata.name}.yml`);
   const loopDir = spec.persistence.statePath.replace(/\/state\.json$/, "");
   const specFile = path.join(outDir, loopDir, "loop.yaml");
-  const cron = spec.schedule.runtime === "github-actions" ? spec.schedule.cadence : "0 9 * * 1-5";
   writeYaml(specFile, spec);
-  writeText(file, githubActionYaml(spec, cron, loopDir));
+  writeText(file, githubActionScaffoldYaml(spec, loopDir));
   return [file, specFile];
 }
 
-function githubActionYaml(spec, cron, loopDir) {
-  return `name: ${spec.metadata.name}
+function githubActionScaffoldYaml(spec, loopDir) {
+  const quotedSpec = shellQuote(`${loopDir}/loop.yaml`);
+  const quotedLoopDir = shellQuote(loopDir);
+  return `# Loop-Engineering preflight scaffold. Add a real executor and durable state channel before scheduling.
+name: ${yamlScalar(`${spec.metadata.name} preflight`)}
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "${cron}"
 
 concurrency:
-  group: ${spec.schedule.concurrency.group}
+  group: ${yamlScalar(spec.schedule.concurrency.group)}
   cancel-in-progress: ${spec.schedule.concurrency.cancelInProgress}
 
+permissions:
+  contents: read
+
 jobs:
-  loop:
+  preflight:
     runs-on: ubuntu-latest
     timeout-minutes: ${spec.schedule.timeoutMinutes}
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-      actions: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Validate loop spec
-        run: npx -y -p @sheepxux/loop-engineering loopctl validate ${loopDir}/loop.yaml
+        run: npm exec --yes --package=github:sheepxux/Loop-Engineering#v1.0.0 -- loopctl validate ${quotedSpec}
       - name: Check budgets and carryover work
         id: next
         run: |
           # next exits non-zero when the loop should not run; that is a skip, not a failure.
-          (npx -y -p @sheepxux/loop-engineering loopctl next ${loopDir} || true) | tee next.json
+          (npm exec --yes --package=github:sheepxux/Loop-Engineering#v1.0.0 -- loopctl next ${quotedLoopDir} || true) | tee next.json
           echo "ok=$(node -p 'JSON.parse(require("fs").readFileSync("next.json","utf8")).ok')" >> "$GITHUB_OUTPUT"
           {
             echo '### loopctl next'
@@ -119,24 +124,35 @@ jobs:
             cat next.json
             echo '\`\`\`'
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Run one loop iteration
+      - name: Executor integration required
         if: steps.next.outputs.ok == 'true'
         run: |
-          # Replace this step with your agent invocation. The agent should follow
-          # the rendered executor skill for this loop and finish by running:
-          #   loopctl record ${loopDir} --run <run-log.json>
-          #
-          # Examples:
-          #   codex exec "Run one iteration of the ${spec.metadata.name} loop per ${loopDir}/loop.yaml"
-          #   claude -p "Run one iteration of the ${spec.metadata.name} loop per ${loopDir}/loop.yaml"
-          echo "No agent configured yet. See the rendered adapter files for ${spec.metadata.name}."
+          echo "This workflow intentionally performs preflight only."
+          echo "Add a trusted executor and a durable state channel before enabling a schedule."
       - name: Skip (budget or gate)
         if: steps.next.outputs.ok != 'true'
         run: echo "loopctl next reported ok=false; skipping this run. See the step summary."
 
-# To let the agent commit updated loop state back to the repository, change
-# permissions.contents to write and push from the run step on a branch.
+# Keep this workflow manually triggered until the executor, least-privilege
+# permissions, secret handling, and state persistence have been reviewed.
 `;
+}
+
+function displayName(name) {
+  return name.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+}
+
+function boundedShortDescription(name) {
+  const value = `Run the ${name} verified agent loop`;
+  return value.length <= 64 ? value : `Run ${name.slice(0, 48)} safely`;
+}
+
+function yamlScalar(value) {
+  return JSON.stringify(String(value));
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'"'"'`)}'`;
 }
 
 function slug(value) {

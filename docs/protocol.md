@@ -1,70 +1,57 @@
-# Protocol
+# Protocol v1
 
-`loop.yaml` is the portable contract for a recurring agent workflow.
-
-The core sequence is:
+`loop.yaml` is the immutable contract for a recurring agent workflow:
 
 ```text
-goal -> discovery -> handoff -> verification -> persistence -> schedule
+goal → discovery → handoff → verification → persistence → schedule → safety
 ```
 
-## Required Sections
+Task strategy lives separately in `strategy.json`. A strategy candidate cannot modify the contract.
 
-- `metadata`: name, owner, description, risk, tags.
-- `goal`: objective, acceptance criteria, stop conditions, blocked conditions.
-- `discovery`: bounded sources and ranking policy.
-- `handoff`: worker role, isolation, worktree behavior, permissions, prompt.
-- `verification`: independent evaluator, default stance, evidence, commands, verdicts.
-- `persistence`: state path, run log directory, inbox, decisions.
+## Required sections
+
+- `metadata`: stable name, owner, description, risk, tags.
+- `goal`: objective, acceptance, stop, and blocked conditions.
+- `discovery`: bounded sources, deterministic-first ranking, item cap.
+- `handoff`: worker role, isolation, typed permissions, prompt.
+- `verification`: independent evaluator, evidence types, commands, verdicts.
+- `persistence`: repository-relative paths under the loop directory.
 - `schedule`: runtime, cadence, timezone, timeout, concurrency.
-- `runner` (optional): local executor type (`dry-run` or `command`), working directory, command, and poll interval.
-- `safety`: budgets, retries, human gates, failure policy.
-- `evolution` (optional): task-strategy baseline, trigger, metric, independent benchmark evaluator, and promotion policy.
-- `outputs`: expected artifacts from a run.
+- `runner` (optional): dry-run or command executor.
+- `safety`: budgets, retries, typed action gates, failure policy.
+- `evolution` (optional): external task-strategy experiment policy.
+- `outputs`: expected durable artifacts.
 
-## Validator Guarantees
+## Mechanical safety checks
 
-The protocol v1 validator rejects:
+The validator rejects self-evaluation, writes without isolation, discovery above the item budget, timeouts above the runtime budget, unsafe paths or branch prefixes, high-risk permissions without exact human-only action IDs, duplicate gate IDs, missing executable verification, and automatic promotion for non-low-risk loops.
 
-- Worker and evaluator with the same role.
-- Write permissions without isolation.
-- Scheduled loops with manual cadence.
-- Discovery budgets above safety budgets.
-- Executable evidence without verification commands.
-- High-risk permissions without human-only gates.
-- Strategy evolution without separate persistence paths or an independent strategy evaluator.
-- Automatic strategy promotion for medium- or high-risk loops.
-- Command executors without an explicit command.
+Human gate entries are typed IDs such as `open-pull-request`, `merge-pull-request`, `deploy-production`, and `change-permissions`; substring matches are not accepted.
 
-JSON Schema catches shape errors. Custom validation catches loop-safety errors.
+## Run evidence
 
-## Runtime Helpers
+`loopctl record` accepts terminal logs only. Each attempted item binds:
 
-Two commands make the persistence contract mechanical instead of aspirational:
+- a schema-valid evaluator artifact stored inside the loop directory;
+- evaluator identity and independent context ID;
+- loop, item, and verdict equality;
+- the artifact SHA-256;
+- every configured evidence type and successful command for a passing result.
 
-- `loopctl next <loop-dir>` reads `loop.yaml` and `state.json` and prints a JSON plan: `ok` (daily run budget, with UTC day rollover), `itemsAllowed`, `retryQueue` (failed items still under `maxRetriesPerItem`), `exhausted` (items that must go to the inbox), and `needsHuman`. Exit code 2 means "do not run".
-- `loopctl record <loop-dir> --run <run-log.json>` validates the run log against `run-log.schema.json`, rejects logs whose results exceed `safety.budgets.maxItemsPerRun`, files the log under `runLogDir`, and rewrites `state.json` (lastRunAt, budget counters, item statuses, retry counts) after validating it against `state.schema.json`.
-- `loopctl evolve <loop-dir> --experiment <experiment.json>` validates a candidate against `experiment.schema.json`, requires matched metric names, minimum samples, successful configured commands, the current baseline version, and the configured improvement threshold. It writes only `strategy.json`; it never edits `loop.yaml`. Human-review promotion requires a second call with `--approve`.
+The recorder rejects duplicate/unknown item IDs, `passed` with no results, aggregate status/verdict mismatches, malformed or future timestamps, cost/time/item overruns, and daily budget bypasses. `dry-run` artifacts do not update task state, budgets, or evolution counters.
 
-## Strategy Evolution
+## Strategy experiments
 
-Evolution-enabled loops add two durable artifacts:
+An experiment includes a benchmark manifest and digest, stable case IDs, matched baseline/candidate case results, per-case artifacts and digests, evaluator command evidence, and a promotion recommendation. Scores are recomputed from per-case results.
 
-- `strategy.json`: the active, versioned task instructions. This is the only mutable behavior surface.
-- `experiments/<id>.json`: matched baseline/candidate scores, sample counts, evidence, and an independent recommendation.
+For human-reviewed promotion:
 
-`state.json.evolution` records the active version, runs since promotion, consecutive failures, recent metric observations, pending review, and experiment history. `loopctl next` reports `evolution.due` when a configured trigger fires.
+1. `loopctl evolve` stages the exact experiment digest.
+2. `loopctl approval create` produces an approval bound to that digest.
+3. `loopctl evolve --approval` verifies state, staged file, digest, baseline, approver, and timestamp.
 
-This is empirical strategy optimization, not model self-training. A candidate cannot change discovery bounds, permissions, verification, budgets, or human gates.
+Promotion archives both strategies. `loopctl strategy rollback` restores archived behavior as a new version and records actor, reason, and time.
 
-## Local Runner
+## Enforcement boundary
 
-`loopd start --once` scans `.loop-engineering/loops`, checks pause state, cadence and `loopctl next`, then acquires `locks/active-run.json` atomically. A successful tick produces a per-run directory containing the plan, event stream, final run log, command output and summary. The lease is released in a `finally` path and expired leases are recoverable.
-
-The `dry-run` executor exercises scheduling and persistence without external calls. The `command` executor receives `LOOP_DIR`, `LOOP_SPEC`, `LOOP_RUN_DIR`, `LOOP_RUN_LOG`, `LOOP_PLAN`, `LOOP_RUN_ID`, and `LOOP_STRATEGY`. It must write a terminal run-log draft to `LOOP_RUN_LOG`; `loopd` validates and records it. Local commands are disabled unless the operator passes `--allow-command`.
-
-Agents should never edit `state.json` by hand; every rendered skill routes persistence through these commands.
-
-## Enforcement Boundary (protocol v1)
-
-The validator, `next`, `record`, leases, cadence checks and command timeouts are mechanical. Agent-level permissions and human gates remain contract language interpreted by the executing agent; `loopd` is not an OS sandbox. The command executor therefore requires explicit operator opt-in.
+Schema checks, typed gates, budgets, hashes, state transitions, leases, and timeouts are mechanical. Natural-language intent and local command permissions are not an OS sandbox. Keep privileged credentials away from unattended loops and preserve human-only governance for external effects.

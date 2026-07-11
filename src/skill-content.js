@@ -38,7 +38,7 @@ Run exactly one bounded iteration of this loop. \`loop.yaml\` is the contract; t
 
 ${PLATFORM_NOTES.get(platform)}
 
-If \`loopctl\` is not on PATH, use \`npx -y -p @sheepxux/loop-engineering loopctl\`.
+If \`loopctl\` is not on PATH, use the repository-local \`node ./bin/loopctl.js\` or the pinned GitHub release package: \`npm exec --yes --package=github:sheepxux/Loop-Engineering#v1.0.0 -- loopctl\`. Do not run a floating package version.
 ${spec ? "" : `
 ## 0. Locate or create the loop
 
@@ -84,7 +84,7 @@ git worktree add ../${name}-<item-id> -b ${spec ? spec.handoff.worktree.branchPr
 
 - The worker touches files only inside its worktree and uses only \`handoff.permissions\`.
 - Worker output: the change itself plus a \`worker-notes.md\` (what changed, why, how to verify).
-- The worker never runs verification and never declares its own work done.
+- The worker may run narrow development checks for feedback, but never issues the final evaluator verdict or declares its own work accepted.
 - If the worker hits a blocked condition, it writes the blocker to its notes and stops.
 - Clean up when the item is finished: \`git worktree remove ../${name}-<item-id>\`.
 
@@ -115,7 +115,16 @@ Compose one run log for the whole run (\`loopctl schema run-log\` prints the sch
   "finishedAt": "<ISO timestamp>",
   "status": "passed",
   "discovered": [{ "id": "<item-id>", "summary": "...", "source": "..." }],
-  "results": [{ "itemId": "<item-id>", "verdict": "pass", "summary": "..." }],
+  "results": [{
+    "itemId": "<item-id>",
+    "verdict": "pass",
+    "summary": "...",
+    "evaluator": {
+      "artifact": "evaluators/<item-id>.json",
+      "sha256": "<64 lowercase hex characters>",
+      "contextId": "<independent evaluator context id>"
+    }
+  }],
   "budget": { "runtimeMinutes": 12, "itemsAttempted": 1, "estimatedUsd": 0 }${evolutionMetricExample(spec)}
 }
 \`\`\`
@@ -254,8 +263,6 @@ Reject if:
 
 export function staticAdapterFiles() {
   return new Map([
-    ["adapters/codex/SKILL.md", executorSkill("codex")],
-    ["adapters/claude-code/SKILL.md", executorSkill("claude-code")],
     ["adapters/chatgpt/SKILL.md", chatgptSkill()],
     ["adapters/openclaw/loop-instructions.md", executorSkill("openclaw")],
     ["adapters/generic-harness/loop-instructions.md", executorSkill("generic-harness")]
@@ -343,7 +350,7 @@ If \`loopctl next\` reported \`evolution.due=true\`, run one bounded strategy ex
 
 1. Read recent run logs, evaluator evidence, decisions, and the active \`strategy.json\`.
 2. Form one falsifiable hypothesis and create exactly one candidate. A candidate may change only task-strategy instructions — never safety, permissions, budgets, verification, evidence requirements, or human gates.
-3. Benchmark the current and candidate strategies on the same representative items with at least \`${spec.evolution.metric.minimumSamples}\` samples each. Measure \`${spec.evolution.metric.name}\` in the \`${spec.evolution.metric.direction}\` direction.
+3. Freeze a benchmark manifest with stable case IDs. Benchmark the current and candidate strategies on those exact cases with at least \`${spec.evolution.metric.minimumSamples}\` samples each. Store per-case scores, verdicts, artifact paths, and SHA-256 digests; the aggregate \`${spec.evolution.metric.name}\` score is recomputed from those cases in the \`${spec.evolution.metric.direction}\` direction.
 4. Use a fresh \`${spec.evolution.evaluator.name}\` context to run every configured command and record exit codes:
 ${commands}
 5. Write experiment JSON matching \`loopctl schema experiment\`, then validate and record it:
@@ -353,7 +360,14 @@ loopctl check experiment <experiment.json>
 loopctl evolve ${loopDir} --experiment <experiment.json>
 \`\`\`
 
-The candidate must improve by at least \`${spec.evolution.metric.minimumImprovement}\`. If promotion mode is \`human-review\`, stop at \`pending-review\`; only a human may re-run with \`--approve\`. Never approve your own strategy.
+The candidate must improve by at least \`${spec.evolution.metric.minimumImprovement}\`. If promotion mode is \`human-review\`, stop at \`pending-review\`; a human must create an approval artifact bound to the staged experiment SHA-256:
+
+\`\`\`bash
+loopctl approval create ${loopDir} --experiment <experiment.json> --approver <human> --reason "<decision>" --out <approval.json>
+loopctl evolve ${loopDir} --experiment <experiment.json> --approval <approval.json>
+\`\`\`
+
+Never approve your own strategy. Use \`loopctl strategy rollback\` to restore archived behavior as a new monotonic version when later evidence regresses.
 
 `;
 }

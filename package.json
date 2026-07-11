@@ -1,6 +1,6 @@
 {
   "name": "@sheepxux/loop-engineering",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Portable agent-loop protocol, strategy evolution, and local durable runner for AI coding agents.",
   "type": "module",
   "main": "./src/cli.js",
@@ -10,6 +10,9 @@
     "loopd": "bin/loopd.js"
   },
   "files": [
+    ".agents/",
+    ".claude-plugin/",
+    ".codex-plugin/",
     ".github/",
     "adapters/",
     "bin/",
@@ -20,6 +23,7 @@
     "SECURITY.md",
     "protocol/",
     "scripts/",
+    "skills/",
     "src/",
     "templates/",
     "README.md",
@@ -27,11 +31,13 @@
     "LICENSE"
   ],
   "scripts": {
+    "build": "npm run build:adapters && npm run build:assets",
     "test": "node --test",
     "build:adapters": "node ./scripts/build-adapters.js",
+    "build:assets": "node ./scripts/build-skill-assets.js",
     "validate:examples": "node ./bin/loopctl.js validate examples/ci-triage/loop.yaml examples/dependency-update/loop.yaml examples/frontend-qa/loop.yaml examples/self-improving-development/loop.yaml",
     "doctor": "node ./bin/loopctl.js doctor",
-    "smoke": "npm test && npm run validate:examples && npm run doctor && node ./bin/loopd.js --help && node ./bin/loopctl.js render codex examples/ci-triage/loop.yaml --out /tmp/loop-engineering-codex && node ./bin/loopctl.js render claude-code examples/ci-triage/loop.yaml --out /tmp/loop-engineering-claude"
+    "smoke": "npm test && npm run validate:examples && npm run doctor && node ./bin/loopctl.js skill validate && node ./bin/loopd.js --help && node ./bin/loopctl.js render codex examples/ci-triage/loop.yaml --out /tmp/loop-engineering-codex && node ./bin/loopctl.js render claude-code examples/ci-triage/loop.yaml --out /tmp/loop-engineering-claude"
   },
   "keywords": [
     "ai-agents",
