@@ -123,8 +123,11 @@ export function installCanonicalSkill({
 function validGitHubInstallMetadata(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const required = ["github-path", "github-ref", "github-repo", "github-tree-sha"];
-  return Object.keys(value).every((key) => required.includes(key))
-    && required.every((key) => typeof value[key] === "string" && value[key].length > 0);
+  const allowed = [...required, "github-pinned"];
+  return Object.keys(value).every((key) => allowed.includes(key))
+    && required.every((key) => typeof value[key] === "string" && value[key].length > 0)
+    && (value["github-pinned"] === undefined
+      || (typeof value["github-pinned"] === "string" && value["github-pinned"].length > 0));
 }
 
 function defaultInstallParent(platform, scope, { cwd, home, codexHome }) {
