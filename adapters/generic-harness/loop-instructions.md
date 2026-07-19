@@ -7,16 +7,16 @@ Run exactly one bounded iteration of this loop. `loop.yaml` is the contract; thi
 
 This contract assumes only file IO and command execution. Run the worker and the evaluator as separate processes or prompts with no shared conversational state.
 
-If `loopctl` is not on PATH, use the repository-local `node ./bin/loopctl.js` or the pinned GitHub release package: `npm exec --yes --package=github:sheepxux/Loop-Engineering#v1.1.0 -- loopctl`. Do not run a floating package version.
+If `loopctl` is not on PATH, use the repository-local `node ./bin/loopctl.js` or the pinned GitHub release package: `npm exec --yes --package=github:sheepxux/SuperLoop#v2.0.0 -- loopctl`. Do not run a floating package version.
 
 ## 0. Locate an approved loop
 
-Loops live in `.loop-engineering/loops/<loop-name>/` with `loop.yaml`, `state.json`, `inbox.md`, `decisions.md`, and `runs/`. If the loop does not exist, stop this executor workflow. Use the canonical `$loop-engineering` Skill to create a non-executable `LoopProposal`, obtain a digest-bound human decision, and compile `loop.yaml` before initialization:
+Loops live in `.superloop/loops/<loop-name>/` with `loop.yaml`, `state.json`, `inbox.md`, `decisions.md`, and `runs/`. If the loop does not exist, stop this executor workflow. Use the canonical `$superloop` Skill to create a non-executable `LoopProposal`, obtain a digest-bound human decision, and compile `loop.yaml` before initialization:
 
 ```bash
 loopctl proposal validate proposal.yaml
 loopctl proposal compile proposal.yaml --decision proposal-decision.json --out loop.yaml
-loopctl init <loop-name> --from loop.yaml --out .loop-engineering/loops
+loopctl init <loop-name> --from loop.yaml --out .superloop/loops
 ```
 
 Never create or approve the proposal from this executor instance.
@@ -24,8 +24,8 @@ Never create or approve the proposal from this executor instance.
 ## 1. Preflight (mechanical — never skip)
 
 ```bash
-loopctl validate .loop-engineering/loops/<loop-name>/loop.yaml
-loopctl next .loop-engineering/loops/<loop-name>
+loopctl validate .superloop/loops/<loop-name>/loop.yaml
+loopctl next .superloop/loops/<loop-name>
 ```
 
 `next` prints JSON. Obey it:
@@ -112,7 +112,7 @@ For continuous discovery:
 
 ```json
 {
-  "apiVersion": "loop-engineering/v1",
+  "apiVersion": "superloop/v2",
   "loop": "<loop-name>",
   "runId": "<UTC timestamp, e.g. 2026-07-10T0900Z>",
   "startedAt": "<ISO timestamp>",
@@ -137,7 +137,7 @@ For finite `phase=work`, `discovered` must be empty and the result binds the app
 
 ```json
 {
-  "apiVersion": "loop-engineering/v1",
+  "apiVersion": "superloop/v2",
   "loop": "<loop-name>",
   "runId": "<UTC timestamp>",
   "startedAt": "<ISO timestamp>",
@@ -164,7 +164,7 @@ For `phase=goal-evaluation`, both `discovered` and `results` must be empty; bind
 
 ```json
 {
-  "apiVersion": "loop-engineering/v1",
+  "apiVersion": "superloop/v2",
   "loop": "<loop-name>",
   "runId": "<UTC timestamp>",
   "startedAt": "<ISO timestamp>",
@@ -191,7 +191,7 @@ When the `LOOP_RUN_LOG` environment variable is present, write the JSON to that 
 Otherwise, record it directly:
 
 ```bash
-loopctl record .loop-engineering/loops/<loop-name> --run <run-log.json>
+loopctl record .superloop/loops/<loop-name> --run <run-log.json>
 ```
 
 This validates the run log, files it under `runs/`, and updates `state.json` budgets and items in one step. Never edit `state.json` by hand.
@@ -207,7 +207,7 @@ End with a short human-readable summary: phase, items or Parts attempted, verdic
 
 ## Runtime control
 
-- Inspect all local loops with `loopctl status --root .loop-engineering/loops`.
+- Inspect all local loops with `loopctl status --root .superloop/loops`.
 - Pause or resume one loop with `loopctl pause <loop-dir>` and `loopctl resume <loop-dir>`.
 - Run one explicit local tick with `loopd start --once --loop <loop-name>`.
 - A configured `command` executor runs only when the operator starts `loopd` with `--allow-command`. Treat that flag as permission to execute repository-local shell commands.

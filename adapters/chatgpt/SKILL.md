@@ -1,5 +1,5 @@
 ---
-name: loop-engineering
+name: superloop
 description: Design, review, and advise on SuperLoop workflows (loop.yaml specs, fixed Work Plans, run logs, evaluator evidence). Use when the user wants to create or improve a recurring or finite long-horizon agent loop from an environment that cannot execute it.
 ---
 

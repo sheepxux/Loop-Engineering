@@ -11,7 +11,7 @@ SuperLoop v1 computes every artifact SHA-256 over canonical JSON, never over YAM
 
 YAML artifacts are parsed into the JSON data model first. Comments, key order, quoting style, and whitespace therefore do not affect the digest. Duplicate keys and values outside the schema-valid JSON domain must be rejected before authorization.
 
-This encoding is frozen for `apiVersion: loop-engineering/v1`. A serializer change that can alter a digest requires a new protocol version; it must not silently invalidate pending decisions.
+This encoding is frozen for `apiVersion: superloop/v2`. A serializer change that can alter a digest requires a new protocol version; it must not silently invalidate pending decisions.
 
 ## Interoperability vector
 

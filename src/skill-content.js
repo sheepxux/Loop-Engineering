@@ -27,7 +27,7 @@ const PLATFORM_NOTES = new Map([
 
 export function executorSkill(platform, spec = null) {
   const name = spec ? spec.metadata.name : "<loop-name>";
-  const loopDir = spec ? loopDirOf(spec) : ".loop-engineering/loops/<loop-name>";
+  const loopDir = spec ? loopDirOf(spec) : ".superloop/loops/<loop-name>";
   const frontmatter = buildFrontmatter(platform, spec);
   const title = spec ? spec.metadata.name : "SuperLoop";
   const objectiveLine = spec ? `\nObjective: ${spec.goal.objective}\n` : "";
@@ -43,16 +43,16 @@ ${approvedWorkPlan}
 
 ${PLATFORM_NOTES.get(platform)}
 
-If \`loopctl\` is not on PATH, use the repository-local \`node ./bin/loopctl.js\` or the pinned GitHub release package: \`npm exec --yes --package=github:sheepxux/Loop-Engineering#v1.1.0 -- loopctl\`. Do not run a floating package version.
+If \`loopctl\` is not on PATH, use the repository-local \`node ./bin/loopctl.js\` or the pinned GitHub release package: \`npm exec --yes --package=github:sheepxux/SuperLoop#v2.0.0 -- loopctl\`. Do not run a floating package version.
 ${spec ? "" : `
 ## 0. Locate an approved loop
 
-Loops live in \`.loop-engineering/loops/<loop-name>/\` with \`loop.yaml\`, \`state.json\`, \`inbox.md\`, \`decisions.md\`, and \`runs/\`. If the loop does not exist, stop this executor workflow. Use the canonical \`$loop-engineering\` Skill to create a non-executable \`LoopProposal\`, obtain a digest-bound human decision, and compile \`loop.yaml\` before initialization:
+Loops live in \`.superloop/loops/<loop-name>/\` with \`loop.yaml\`, \`state.json\`, \`inbox.md\`, \`decisions.md\`, and \`runs/\`. If the loop does not exist, stop this executor workflow. Use the canonical \`$superloop\` Skill to create a non-executable \`LoopProposal\`, obtain a digest-bound human decision, and compile \`loop.yaml\` before initialization:
 
 \`\`\`bash
 loopctl proposal validate proposal.yaml
 loopctl proposal compile proposal.yaml --decision proposal-decision.json --out loop.yaml
-loopctl init <loop-name> --from loop.yaml --out .loop-engineering/loops
+loopctl init <loop-name> --from loop.yaml --out .superloop/loops
 \`\`\`
 
 Never create or approve the proposal from this executor instance.
@@ -121,7 +121,7 @@ End with a short human-readable summary: phase, items or Parts attempted, verdic
 
 ## Runtime control
 
-- Inspect all local loops with \`loopctl status --root .loop-engineering/loops\`.
+- Inspect all local loops with \`loopctl status --root .superloop/loops\`.
 - Pause or resume one loop with \`loopctl pause <loop-dir>\` and \`loopctl resume <loop-dir>\`.
 - Run one explicit local tick with \`loopd start --once --loop <loop-name>\`.
 - A configured \`command\` executor runs only when the operator starts \`loopd\` with \`--allow-command\`. Treat that flag as permission to execute repository-local shell commands.
@@ -340,7 +340,7 @@ ${finite}`;
 function runLogExample(spec, name) {
   const continuous = `\`\`\`json
 {
-  "apiVersion": "loop-engineering/v1",
+  "apiVersion": "superloop/v2",
   "loop": "${name}",
   "runId": "<UTC timestamp, e.g. 2026-07-10T0900Z>",
   "startedAt": "<ISO timestamp>",
@@ -365,7 +365,7 @@ function runLogExample(spec, name) {
 
 \`\`\`json
 {
-  "apiVersion": "loop-engineering/v1",
+  "apiVersion": "superloop/v2",
   "loop": "${name}",
   "runId": "<UTC timestamp>",
   "startedAt": "<ISO timestamp>",
@@ -392,7 +392,7 @@ For \`phase=goal-evaluation\`, both \`discovered\` and \`results\` must be empty
 
 \`\`\`json
 {
-  "apiVersion": "loop-engineering/v1",
+  "apiVersion": "superloop/v2",
   "loop": "${name}",
   "runId": "<UTC timestamp>",
   "startedAt": "<ISO timestamp>",
@@ -418,7 +418,7 @@ For \`phase=goal-evaluation\`, both \`discovered\` and \`results\` must be empty
 }
 
 export function chatgptSkill(spec = null) {
-  const name = spec ? spec.metadata.name : "loop-engineering";
+  const name = spec ? spec.metadata.name : "superloop";
   const title = spec ? spec.metadata.name : "SuperLoop";
   const objectiveLine = spec ? `\nObjective: ${spec.goal.objective}\n` : "";
 
@@ -603,7 +603,7 @@ function buildFrontmatter(platform, spec) {
   if (platform === "openclaw" || platform === "generic-harness") {
     return "";
   }
-  const name = spec ? spec.metadata.name : "loop-engineering";
+  const name = spec ? spec.metadata.name : "superloop";
   const description = spec
       ? `Run one bounded iteration of the ${spec.metadata.name} loop using SuperLoop — preflight with loopctl, eligible Parts or bounded discovery, independent gates, recorded state, and optional loopd execution. Use when continuing this loop or reviewing its state.`
     : "Run one bounded iteration of a SuperLoop workflow from a loop.yaml spec. Use when a user asks to create, continue, run, or review a recurring or finite goal loop with Work Plans or discovery, isolated handoff, independent verification, persisted state, budgets, human gates, or the local loopd runner.";

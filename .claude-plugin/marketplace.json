@@ -1,20 +1,20 @@
 {
-  "name": "loop-engineering",
+  "name": "superloop",
   "owner": {
     "name": "sheepxux"
   },
   "metadata": {
     "description": "SuperLoop Skill and local reference runtime",
-    "version": "1.1.0"
+    "version": "2.0.0"
   },
   "plugins": [
     {
-      "name": "loop-engineering",
+      "name": "superloop",
       "description": "SuperLoop compiles vague ideas into verified goals and governed agent loops.",
       "source": "./",
       "strict": true,
       "skills": [
-        "./skills/loop-engineering"
+        "./skills/superloop"
       ]
     }
   ]
