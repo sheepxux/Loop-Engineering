@@ -1,6 +1,6 @@
 # Canonical JSON and digest interoperability
 
-Loop-Engineering v1 computes every artifact SHA-256 over canonical JSON, never over YAML or pretty-printed JSON bytes. The encoding is the JSON Canonicalization Scheme (JCS) defined by [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785), restricted to schema-valid JSON values:
+SuperLoop v1 computes every artifact SHA-256 over canonical JSON, never over YAML or pretty-printed JSON bytes. The encoding is the JSON Canonicalization Scheme (JCS) defined by [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785), restricted to schema-valid JSON values:
 
 1. Objects contain plain JSON properties only. Property names are sorted by raw UTF-16 code units.
 2. Arrays retain their original order and cannot be sparse.
@@ -33,4 +33,4 @@ SHA-256:
 54f0fe0b4f3b0a0f8fde478c862a7a0ceb9a410f908391ccc61c58e31365c22d
 ```
 
-External approval services must reproduce this vector before issuing Loop-Engineering digests. The reference implementation is exported as `canonicalJson()` and `sha256Json()` from `src/fs-utils.js`.
+External approval services must reproduce this vector before issuing SuperLoop digests. The reference implementation is exported as `canonicalJson()` and `sha256Json()` from `src/fs-utils.js`.

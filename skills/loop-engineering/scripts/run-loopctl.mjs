@@ -31,7 +31,7 @@ if (!process.env.LOOP_ENGINEERING_RUNTIME_PACKAGE) {
 }
 
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-console.error(`Local Loop-Engineering runtime not found; using ${fallbackPackage}.`);
+console.error(`Local SuperLoop runtime not found; using ${fallbackPackage}.`);
 const fallback = spawnSync(npm, [
   "exec",
   "--yes",
@@ -42,7 +42,7 @@ const fallback = spawnSync(npm, [
 ], { stdio: "inherit" });
 if (!fallback.error) process.exit(fallback.status ?? 1);
 
-console.error("Loop-Engineering runtime could not be started.");
+console.error("SuperLoop runtime could not be started.");
 console.error(`npm exec --yes --package=${pinnedFallbackPackage} -- loopctl <command>`);
 console.error("Source: https://github.com/sheepxux/Loop-Engineering");
 process.exit(127);

@@ -4,13 +4,13 @@
     "name": "sheepxux"
   },
   "metadata": {
-    "description": "Loop-Engineering Skill and local reference runtime",
+    "description": "SuperLoop Skill and local reference runtime",
     "version": "1.1.0"
   },
   "plugins": [
     {
       "name": "loop-engineering",
-      "description": "Compile vague ideas into verified goals and governed agent loops.",
+      "description": "SuperLoop compiles vague ideas into verified goals and governed agent loops.",
       "source": "./",
       "strict": true,
       "skills": [

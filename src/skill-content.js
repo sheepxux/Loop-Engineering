@@ -29,7 +29,7 @@ export function executorSkill(platform, spec = null) {
   const name = spec ? spec.metadata.name : "<loop-name>";
   const loopDir = spec ? loopDirOf(spec) : ".loop-engineering/loops/<loop-name>";
   const frontmatter = buildFrontmatter(platform, spec);
-  const title = spec ? spec.metadata.name : "Loop-Engineering";
+  const title = spec ? spec.metadata.name : "SuperLoop";
   const objectiveLine = spec ? `\nObjective: ${spec.goal.objective}\n` : "";
   const approvedGoalContract = renderedGoalSection(spec);
   const approvedWorkPlan = workPlanSection(spec);
@@ -133,7 +133,7 @@ End with a short human-readable summary: phase, items or Parts attempted, verdic
 - Never work a locked or out-of-plan Part, advance after a failed Part Gate, or declare completion before the final Goal Gate passes.
 - Never mutate an approved fixed Work Plan during execution. Stop and create a new proposal revision when scope or Part meaning changes.
 - Never merge, deploy, delete data, spend money, send or publish externally, or change permissions. These are human-only${humanOnlyList(spec)}.
-- Enforcement in the v1 protocol is advisory: nothing in Loop-Engineering physically prevents a violation. Treat these rules as absolute precisely because you are the only enforcement layer.
+- Enforcement in the v1 protocol is advisory: nothing in SuperLoop physically prevents a violation. Treat these rules as absolute precisely because you are the only enforcement layer.
 `;
 }
 
@@ -419,15 +419,15 @@ For \`phase=goal-evaluation\`, both \`discovered\` and \`results\` must be empty
 
 export function chatgptSkill(spec = null) {
   const name = spec ? spec.metadata.name : "loop-engineering";
-  const title = spec ? spec.metadata.name : "Loop-Engineering";
+  const title = spec ? spec.metadata.name : "SuperLoop";
   const objectiveLine = spec ? `\nObjective: ${spec.goal.objective}\n` : "";
 
   return `---
 name: ${name}
 description: ${
     spec
-      ? `Advise on the ${spec.metadata.name} loop using Loop-Engineering — design and review the spec, review run logs and evaluator evidence, and act as the human-review assistant. This environment cannot execute the loop.`
-      : "Design, review, and advise on Loop-Engineering workflows (loop.yaml specs, fixed Work Plans, run logs, evaluator evidence). Use when the user wants to create or improve a recurring or finite long-horizon agent loop from an environment that cannot execute it."
+      ? `Advise on the ${spec.metadata.name} loop using SuperLoop — design and review the spec, review run logs and evaluator evidence, and act as the human-review assistant. This environment cannot execute the loop.`
+      : "Design, review, and advise on SuperLoop workflows (loop.yaml specs, fixed Work Plans, run logs, evaluator evidence). Use when the user wants to create or improve a recurring or finite long-horizon agent loop from an environment that cannot execute it."
   }
 ---
 
@@ -452,7 +452,7 @@ You are running in an environment without repository or filesystem access. You c
 
 ## 3. Review run evidence
 
-- When the user pastes a run log, state file, or evaluator result, check it against the Loop-Engineering contract: does every attempted item have an evaluator verdict backed by evidence? For finite work, was each Part eligible and digest-bound, did its exact Part Gate pass, and did the final Goal Gate cover every exact Goal criterion? Are budgets being respected? Did anything bypass a human gate?
+- When the user pastes a run log, state file, or evaluator result, check it against the SuperLoop contract: does every attempted item have an evaluator verdict backed by evidence? For finite work, was each Part eligible and digest-bound, did its exact Part Gate pass, and did the final Goal Gate cover every exact Goal criterion? Are budgets being respected? Did anything bypass a human gate?
 - Assume results are broken until the pasted evidence proves otherwise. A worker's claim is not evidence.
 
 ## 4. Assist the human at the gate
@@ -605,8 +605,8 @@ function buildFrontmatter(platform, spec) {
   }
   const name = spec ? spec.metadata.name : "loop-engineering";
   const description = spec
-      ? `Run one bounded iteration of the ${spec.metadata.name} loop using Loop-Engineering — preflight with loopctl, eligible Parts or bounded discovery, independent gates, recorded state, and optional loopd execution. Use when continuing this loop or reviewing its state.`
-    : "Run one bounded iteration of a Loop-Engineering workflow from a loop.yaml spec. Use when a user asks to create, continue, run, or review a recurring or finite goal loop with Work Plans or discovery, isolated handoff, independent verification, persisted state, budgets, human gates, or the local loopd runner.";
+      ? `Run one bounded iteration of the ${spec.metadata.name} loop using SuperLoop — preflight with loopctl, eligible Parts or bounded discovery, independent gates, recorded state, and optional loopd execution. Use when continuing this loop or reviewing its state.`
+    : "Run one bounded iteration of a SuperLoop workflow from a loop.yaml spec. Use when a user asks to create, continue, run, or review a recurring or finite goal loop with Work Plans or discovery, isolated handoff, independent verification, persisted state, budgets, human gates, or the local loopd runner.";
   return `---\nname: ${name}\ndescription: ${description}\n---\n\n`;
 }
 

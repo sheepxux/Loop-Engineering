@@ -3,7 +3,7 @@ kind: Loop
 metadata:
   name: example-loop
   owner: engineering
-  description: "Template for a recurring Loop-Engineering workflow."
+  description: "Template for a recurring SuperLoop workflow."
   risk: medium
   tags:
     - loop-engineering

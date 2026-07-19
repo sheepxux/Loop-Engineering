@@ -4,7 +4,7 @@ description: Turn vague, recurring, or finite long-horizon ideas into verifiable
 license: MIT
 ---
 
-# Loop-Engineering
+# SuperLoop
 
 Compile an idea into a bounded, auditable agent loop. Treat a `LoopProposal` as a non-executable design, `loop.yaml` as the immutable operating contract, and `strategy.json` as the only evolvable behavior surface.
 

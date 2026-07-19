@@ -1,16 +1,16 @@
 <p align="center">
-  <img src="docs/assets/cover.png" alt="Loop-Engineering" width="720">
+  <img src="docs/assets/cover.png" alt="SuperLoop" width="720">
 </p>
 
 <p align="center">
   <a href="README.md">简体中文</a> · <strong>English</strong>
 </p>
 
-# Loop-Engineering
+# SuperLoop
 
 An installable advanced Agent Skill with a local reference runtime that supports it.
 
-Loop-Engineering first compiles a vague idea into a reviewable goal, then governs recurring or finite long-horizon agent work with an explicit, auditable engineering contract:
+SuperLoop first compiles a vague idea into a reviewable goal, then governs recurring or finite long-horizon agent work with an explicit, auditable engineering contract:
 
 ```text
 vague idea → Goal Contract + LoopProposal (non-executable)
@@ -24,6 +24,8 @@ vague idea → Goal Contract + LoopProposal (non-executable)
 Its primary product is the complete Skill under `skills/loop-engineering`. `loopctl`, `loopd`, protocol schemas, and platform plugins are the deterministic execution foundation for that Skill.
 
 ## Current Version: v1.1.0
+
+> **Compatibility note:** the product brand is now **SuperLoop**. To avoid breaking existing installations, `v1` contract digests, and durable state, this release retains the `loop-engineering` Skill/package identifiers, the `loop-engineering/v1` API version, the `.loop-engineering` state directory, and the existing GitHub repository URL. Any technical-identifier migration will ship in a future major version with an explicit migration path.
 
 `v1.1.0` adds the Idea-to-Loop design plane. The Skill turns a vague idea into an evidence-bearing Goal Contract and a non-executable `LoopProposal`, asking at most three questions that materially change the design. A human decision binds the proposal's exact SHA-256 before the runtime can deterministically compile `loop.yaml`. A changed proposal, unresolved blocker, or digest mismatch fails closed. Digests use a frozen [Canonical JSON algorithm](docs/canonical-json.md) that external approval systems can reproduce.
 

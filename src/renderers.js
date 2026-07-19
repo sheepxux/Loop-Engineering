@@ -88,7 +88,7 @@ function renderGitHubActionsScaffold(spec, outDir) {
 function githubActionScaffoldYaml(spec, loopDir) {
   const quotedSpec = shellQuote(`${loopDir}/loop.yaml`);
   const quotedLoopDir = shellQuote(loopDir);
-  return `# Loop-Engineering preflight scaffold. Add a real executor and durable state channel before scheduling.
+  return `# SuperLoop preflight scaffold. Add a real executor and durable state channel before scheduling.
 name: ${yamlScalar(`${spec.metadata.name} preflight`)}
 
 on:

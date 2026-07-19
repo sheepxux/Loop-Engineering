@@ -1,4 +1,4 @@
-# Loop-Engineering
+# SuperLoop
 
 Run exactly one bounded iteration of this loop. `loop.yaml` is the contract; this file tells you how to execute it. If this file and `loop.yaml` disagree, `loop.yaml` wins.
 
@@ -219,4 +219,4 @@ End with a short human-readable summary: phase, items or Parts attempted, verdic
 - Never work a locked or out-of-plan Part, advance after a failed Part Gate, or declare completion before the final Goal Gate passes.
 - Never mutate an approved fixed Work Plan during execution. Stop and create a new proposal revision when scope or Part meaning changes.
 - Never merge, deploy, delete data, spend money, send or publish externally, or change permissions. These are human-only.
-- Enforcement in the v1 protocol is advisory: nothing in Loop-Engineering physically prevents a violation. Treat these rules as absolute precisely because you are the only enforcement layer.
+- Enforcement in the v1 protocol is advisory: nothing in SuperLoop physically prevents a violation. Treat these rules as absolute precisely because you are the only enforcement layer.

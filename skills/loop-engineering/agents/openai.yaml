@@ -1,5 +1,5 @@
 interface:
-  display_name: "Loop-Engineering"
+  display_name: "SuperLoop"
   short_description: "Turn ideas into verified long-horizon loops"
   icon_small: "./assets/icon-small.png"
   icon_large: "./assets/icon-large.png"

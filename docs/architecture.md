@@ -1,8 +1,8 @@
-# Loop-Engineering Architecture
+# SuperLoop Architecture
 
 ## Product boundary
 
-Loop-Engineering is a complete Agent Skill plus a portable local reference runtime. The Skill turns vague ideas into verifiable goals, decides whether a loop is appropriate, and guides continuous discovery or finite long-horizon Work Plans, execution, review, recovery, and measured strategy evolution. The runtime enforces the deterministic parts of the reviewed contract.
+SuperLoop is a complete Agent Skill plus a portable local reference runtime. The Skill turns vague ideas into verifiable goals, decides whether a loop is appropriate, and guides continuous discovery or finite long-horizon Work Plans, execution, review, recovery, and measured strategy evolution. The runtime enforces the deterministic parts of the reviewed contract.
 
 The Skill and runtime meet at explicit artifacts. Model judgment may draft a proposal; it may not silently turn that proposal into execution authority.
 

@@ -1,16 +1,16 @@
 <p align="center">
-  <img src="docs/assets/cover.png" alt="Loop-Engineering" width="720">
+  <img src="docs/assets/cover.png" alt="SuperLoop" width="720">
 </p>
 
 <p align="center">
   <strong>简体中文</strong> · <a href="README.en.md">English</a>
 </p>
 
-# Loop-Engineering
+# SuperLoop
 
 一个可安装的高级 Agent Skill，以及支撑它运行的本地参考运行时。
 
-Loop-Engineering 先把模糊想法编译成可审阅的目标，再用明确、可审计的工程契约管理周期性或有限长时程 Agent 工作：
+SuperLoop 先把模糊想法编译成可审阅的目标，再用明确、可审计的工程契约管理周期性或有限长时程 Agent 工作：
 
 ```text
 模糊想法 → Goal Contract + LoopProposal（不可执行）
@@ -24,6 +24,8 @@ Loop-Engineering 先把模糊想法编译成可审阅的目标，再用明确、
 它的第一身份是 `skills/loop-engineering` 下的完整 Skill；`loopctl`、`loopd`、协议 Schema 和平台插件是 Skill 的确定性执行底座。
 
 ## 当前版本：v1.1.0
+
+> **兼容性说明：** 产品品牌现为 **SuperLoop**。为避免破坏现有安装、`v1` 契约摘要和持久状态，当前版本继续保留 `loop-engineering` Skill/包标识、`loop-engineering/v1` API 版本、`.loop-engineering` 状态目录及原 GitHub 仓库地址。任何技术标识迁移都将在带明确迁移工具的后续主版本中进行。
 
 `v1.1.0` 新增 Idea-to-Loop 设计层：Skill 会把模糊想法转成带证据的 Goal Contract 和不可执行的 `LoopProposal`，最多询问 3 个真正改变设计的问题；人类确认绑定提案的精确 SHA-256，运行时随后确定性编译 `loop.yaml`。提案被改动、仍有阻塞项或确认摘要不匹配时都会失败关闭。摘要使用固定的 [Canonical JSON 规则](docs/canonical-json.md)，可由外部审批系统复现。
 
